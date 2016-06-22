@@ -21,17 +21,13 @@ along with LTTL v2.0. If not, see <http://www.gnu.org/licenses/>.
 from __future__ import absolute_import
 from __future__ import unicode_literals
 
-__version__ = "1.0.0"
-
 import unittest
-
-import sys
-from os import path
-sys.path.append(path.dirname(path.dirname(path.abspath(__file__))))
 
 from LTTL.Segment import Segment
 from LTTL.Segmentation import Segmentation
 from LTTL.Input import Input
+
+__version__ = "1.0.0"
 
 
 class TestSegment(unittest.TestCase):

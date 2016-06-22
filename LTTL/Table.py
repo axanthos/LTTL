@@ -42,6 +42,8 @@ from builtins import str as text
 from future.utils import iteritems
 from past.builtins import xrange
 
+__version__ = "1.0.0"
+
 
 class Table(object):
     """Base class for tables in LTTL."""

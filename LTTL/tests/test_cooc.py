@@ -1,3 +1,23 @@
+"""
+Module TestCooc.py
+Copyright 2016 LangTech Sarl (info@langtech.ch)
+-----------------------------------------------------------------------------
+This file is part of the LTTL package v2.0
+
+LTTL v2.0 is free software: you can redistribute it and/or modify
+it under the terms of the GNU General Public License as published by
+the Free Software Foundation, either version 3 of the License, or
+(at your option) any later version.
+
+LTTL v2.0 is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License
+along with LTTL v2.0. If not, see <http://www.gnu.org/licenses/>.
+"""
+
 from __future__ import absolute_import
 from __future__ import unicode_literals
 
@@ -11,10 +31,11 @@ import re
 import unittest
 
 __version__ = "1.0.0"
+__author__ = "Mahtab Mohammadi"
+__maintainer__ = "LangTech Sarl"
 
 
 class TestCooc(unittest.TestCase):
-
     def setUp(self):
         input_seg = Input("un texte")
         word_seg = Segmenter.tokenize(
@@ -31,13 +52,11 @@ class TestCooc(unittest.TestCase):
             import_annotations=False,
             merge_duplicates=True,
         )
-        print letter_seg.to_string()
         vowel_seg, consonant_seg = Segmenter.select(
             letter_seg,
             re.compile(r'V'),
             annotation_key='type',
         )
-        print vowel_seg.to_string()
 
         #  Create the cooccurrence matrix for cooccurrence in window
         #  with window_size=3 and without annotation (woa):
@@ -76,7 +95,7 @@ class TestCooc(unittest.TestCase):
         self.window_woa_header_col_type = 'string'
         self.window_woa_col_type = {
             col_id: 'continuous' for col_id in self.window_woa_col_ids
-        }
+            }
         self.window_woa_ref = IntPivotCrosstab(
             self.window_woa_row_ids,
             self.window_woa_col_ids,
@@ -103,7 +122,7 @@ class TestCooc(unittest.TestCase):
         self.window_wa_header_col_type = 'string'
         self.window_wa_col_type = {
             col_id: 'continuous' for col_id in self.window_wa_col_ids
-        }
+            }
         self.window_wa_ref = IntPivotCrosstab(
             self.window_wa_row_ids,
             self.window_wa_col_ids,
@@ -151,7 +170,7 @@ class TestCooc(unittest.TestCase):
         self.context_wos_woa_header_col_type = 'string'
         self.context_wos_woa_col_type = {
             col_id: 'continuous' for col_id in self.context_wos_woa_col_ids
-        }
+            }
         self.context_wos_woa_ref = IntPivotCrosstab(
             self.context_wos_woa_row_ids,
             self.context_wos_woa_col_ids,
@@ -178,7 +197,7 @@ class TestCooc(unittest.TestCase):
         self.context_wos_wa_header_col_type = 'string'
         self.context_wos_wa_col_type = {
             col_id: 'continuous' for col_id in self.context_wos_wa_col_ids
-        }
+            }
         self.context_wos_wa_ref = IntPivotCrosstab(
             self.context_wos_wa_row_ids,
             self.context_wos_wa_col_ids,
@@ -207,7 +226,7 @@ class TestCooc(unittest.TestCase):
         self.context_ws_woa_header_col_type = 'string'
         self.context_ws_woa_col_type = {
             col_id: 'continuous' for col_id in self.context_ws_woa_col_ids
-        }
+            }
         self.context_ws_woa_ref = IntPivotCrosstab(
             self.context_ws_woa_row_ids,
             self.context_ws_woa_col_ids,
@@ -231,7 +250,7 @@ class TestCooc(unittest.TestCase):
         self.context_ws_wa_header_col_type = 'string'
         self.context_ws_wa_col_type = {
             col_id: 'continuous' for col_id in self.context_ws_wa_col_ids
-        }
+            }
         self.context_ws_wa_ref = IntPivotCrosstab(
             self.context_ws_wa_row_ids,
             self.context_ws_wa_col_ids,
@@ -265,21 +284,11 @@ class TestCooc(unittest.TestCase):
             contexts={'segmentation': word_seg},
             units2={'segmentation': consonant_seg},
         )
-        print Processor.count_in_context(
-            units={'segmentation': vowel_seg},
-            contexts={'segmentation': word_seg},
-        ).to_string()
-        print Processor.count_in_context(
-            units={'segmentation': consonant_seg},
-            contexts={'segmentation': word_seg},
-        ).to_string()
         self.output_cooc_in_context_ws_wa = Processor.cooc_in_context(
             units={'segmentation': vowel_seg, 'annotation_key': 'type'},
             contexts={'segmentation': word_seg},
             units2={'segmentation': consonant_seg, 'annotation_key': 'type'},
         )
-        print self.output_cooc_in_window_wa.values
-        print self.output_cooc_in_window_woa.values
 
     # ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
     # Testing the table format to see if it is an IntPivotCrosstab
@@ -664,32 +673,32 @@ class TestCooc(unittest.TestCase):
     # 1. Co-occurrence in window without annotation:
     def test_cooc_window_woa_col_type(self):
         for col_type in self.output_cooc_in_window_woa.col_type.values():
-                        self.assertEqual(col_type, 'continuous')
+            self.assertEqual(col_type, 'continuous')
 
     # 2. Co-occurrence in window with annotation:
     def test_cooc_window_wa_table_col_type(self):
         for col_type in self.output_cooc_in_window_wa.col_type.values():
-                        self.assertEqual(col_type, 'continuous')
+            self.assertEqual(col_type, 'continuous')
 
     # 3. Co-occurrence in context without secondary unit and without annotation:
     def test_cooc_context_wos_woa_col_type(self):
         for col_type in self.output_cooc_in_context_wos_woa.col_type.values():
-                        self.assertEqual(col_type, 'continuous')
+            self.assertEqual(col_type, 'continuous')
 
     # 4. Co_occurrence in context wihout a secondary unit and with annotation:
     def test_cooc_context_wos_wa_col_type(self):
         for col_type in self.output_cooc_in_context_wos_wa.col_type.values():
-                        self.assertEqual(col_type, 'continuous')
+            self.assertEqual(col_type, 'continuous')
 
     # 5. Co_occurrence in context wih a secondary unit and without annotation:
     def test_cooc_context_ws_woa_col_type(self):
         for col_type in self.output_cooc_in_context_ws_wa.col_type.values():
-                        self.assertEqual(col_type, 'continuous')
+            self.assertEqual(col_type, 'continuous')
 
     # 6. Co_occurrence in context wih a secondary unit and with annotation:
     def test_cooc_context_ws_wa_col_type(self):
         for col_type in self.output_cooc_in_context_ws_wa.col_type.values():
-                        self.assertEqual(col_type, 'continuous')
+            self.assertEqual(col_type, 'continuous')
 
 
 if __name__ == '__main__':

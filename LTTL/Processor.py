@@ -22,8 +22,8 @@ from __future__ import absolute_import
 from __future__ import unicode_literals
 
 from math import sqrt
-
 from builtins import range
+
 from .Segmentation import Segmentation
 from .Table import *
 from .Utils import (
