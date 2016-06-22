@@ -2130,3 +2130,94 @@ def collocations(
             None,
         )
     )
+
+# TODO: docstring
+def cooc_in_window(
+    units=None,
+    window_size=2,
+    progress_callback=None,
+):
+    """ Measure the cooccurrence in sliding window """
+    contingency = count_in_window(
+        units,
+        window_size,
+        progress_callback,
+    )
+    normalized = contingency.to_normalized('presence/absence')
+    np_contingency = normalized.to_numpy()
+    cooc = np.dot(
+        np.transpose(np_contingency),
+        np_contingency,
+    )
+    try:
+        return IntPivotCrosstab.from_numpy(
+            contingency.col_ids[:],
+            contingency.col_ids[:],
+            cooc,
+            contingency.header_row_id,
+            contingency.header_row_type,
+            contingency.header_row_id,
+            contingency.header_row_type,
+            contingency.col_type,
+        )
+    except IndexError:
+        return IntPivotCrosstab(list(), list(), dict())
+
+# TODO: docstring
+def cooc_in_context(
+    units=None,
+    contexts= None,
+    units2=None,
+    progress_callback=None,
+):
+    """ Measure the cooccurrence in a context type segmentation"""
+    contingency = count_in_context(
+        units,
+        contexts,
+        progress_callback,
+    )
+    normalized = contingency.to_normalized('presence/absence')
+    np_contingency = normalized.to_numpy()
+    if units2 is not None:
+        contingency2 = count_in_context(units2, contexts, progress_callback)
+        normalized2 = contingency2.to_normalized('presence/absence')
+        np_contingency2 = normalized2.to_numpy()
+        row_labels = contingency.row_ids
+        row_labels2 = contingency2.row_ids
+        keep_from_contingency = [
+            i for i in xrange(len(row_labels)) if row_labels[i] in row_labels2
+        ]
+        keep_from_contingency2 =[
+            i for i in xrange(len(row_labels2)) if row_labels2[i] in row_labels
+        ]
+        try:
+            np_contingency = np_contingency[keep_from_contingency].astype(int)
+            np_contingency2 = np_contingency2[keep_from_contingency2].astype(int)
+            cooc = np.dot(np.transpose(np_contingency2), np_contingency)
+            return IntPivotCrosstab.from_numpy(
+                contingency2.col_ids[:],
+                contingency.col_ids[:],
+                cooc,
+                contingency.header_col_id,
+                contingency.header_col_type,
+                contingency2.header_col_id,
+                contingency2.header_col_type,
+                contingency.col_type,
+            )
+        except IndexError:
+            return IntPivotCrosstab(list(), list(), dict())
+    else:
+        cooc = np.dot(np.transpose(np_contingency), np_contingency)
+        try:
+            return IntPivotCrosstab.from_numpy(
+                contingency.col_ids[:],
+                contingency.col_ids[:],
+                cooc,
+                contingency.header_col_id,
+                contingency.header_col_type,
+                contingency.header_col_id,
+                contingency.header_col_type,
+                contingency.col_type,
+            )
+        except IndexError:
+            return IntPivotCrosstab(list(), list(), dict())

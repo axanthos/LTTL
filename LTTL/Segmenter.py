@@ -370,7 +370,7 @@ def tokenize(
                     if regex_annotations is not None:
                         new_segment_annotations = regex_annotations.copy()
                     else:
-                        new_segment_annotations = None
+                        new_segment_annotations = dict()
                     # Update annotations with the key-value pair prepared
                     # above, if any...
                     if key is not None and value is not None:
