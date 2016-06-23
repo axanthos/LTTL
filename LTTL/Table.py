@@ -192,6 +192,7 @@ class Table(object):
             """Create an Orange 3 table."""
             raise NotImplementedError('method not implemented yet!')
 
+    else:
         # TODO: test.
         def to_orange_table(self, encoding='iso-8859-15'):
             """Create an Orange 2 table.

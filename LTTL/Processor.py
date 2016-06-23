@@ -2131,6 +2131,7 @@ def collocations(
         )
     )
 
+
 # TODO: docstring
 def cooc_in_window(
     units=None,
@@ -2162,6 +2163,7 @@ def cooc_in_window(
         )
     except IndexError:
         return IntPivotCrosstab(list(), list(), dict())
+
 
 # TODO: docstring
 def cooc_in_context(
