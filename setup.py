@@ -36,7 +36,7 @@ with open(path.join(here, 'README.rst'), encoding='utf-8') as f:
 setup(
     name='LTTL',
 
-    version='2.0.0',
+    version='2.0a0',
 
     description='LangTech Text Library (LTTL) for text processing and analysis',
     long_description=long_description,
