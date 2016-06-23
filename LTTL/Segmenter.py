@@ -1177,8 +1177,6 @@ def recode(
             progress_callback()
 
     # If list of new objects contains a single Input, return it.
-    # if len(new_objects) == 1 and isinstance(new_objects[0], Input):
-    # return new_objects[0]
     if len(new_objects) == 1 and isinstance(new_objects[0], Input):
         return new_objects[0]
     # Otherwise return a new segmentation with the segments in the list
