@@ -138,7 +138,61 @@ def clone_chunks(source, dst):
 
 
 class Segmentation(object):
+
+    # list of string-like or int pointer to another string-like
+    # there should be no pointer to pointer !
     data = list()
+
+    @staticmethod
+    def get_data(index):
+        """
+        Get the data string from the list
+
+        :param index: the position of the element to retrieve.
+
+        :return: the element at the specified position, or the one
+        pointed and dereferenced.
+        """
+        if index < 0:
+            index += len(Segmentation.data)
+        value = Segmentation.data[index]
+        if isinstance(value, int):
+            value = Segmentation.data[value]
+        return value
+
+    @staticmethod
+    def set_data(index, value_or_ref):
+        """
+        Set the data string in the list
+
+        :param index: the position of the element to modify.
+        If smaller than 0 or larger than the list size, append at the end.
+
+        :param value_or_ref: the element to insert. Can be either a string-like
+        or an integer. In the latter case it is considered as a pointer to an
+        earlier position in the same list. So it must be between 0 and
+        len(data) - 1 and different from the index.
+        """
+        if isinstance(value_or_ref, int):
+            if value_or_ref < 0 or value_or_ref > len(Segmentation.data) - 1:
+                raise IndexError("Invalid pointer (out of bound reference)")
+            if value_or_ref == index:
+                raise IndexError("Invalid pointer: (self reference)")
+            # if the pointer references another pointer,
+            # replace it to point directly to the string
+            ref = Segmentation.data[value_or_ref]
+            if isinstance(ref, int):
+                value_or_ref = ref
+
+        if 0 <= index < len(Segmentation.data):
+            if (
+                isinstance(value_or_ref, int) and
+                not isinstance(Segmentation.data[index], int)
+            ):
+                raise IndexError("Pointers can only replace pointers")
+            Segmentation.data[index] = value_or_ref
+        else:
+            Segmentation.data.append(value_or_ref)
 
     def __init__(self, segmentation=None, label='segmented_data'):
         """Initialize a Segmentation instance"""
@@ -702,7 +756,7 @@ class Segmentation(object):
             # Get the segment's address...
             first_segment = segmentation_sorted[first_index]
             first_str_index = first_segment.str_index
-            first_string_length = len(Segmentation.data[first_str_index])
+            first_string_length = len(Segmentation.get_data(first_str_index))
             first_end = first_segment.end or first_string_length
 
             # For each segment after this one...

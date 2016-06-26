@@ -104,20 +104,6 @@ def count_in_context(
         # CASE 1A: unit sequence length is greater than 1...
         if unit_seq_length > 1:
 
-            # Get the list of contexts in final format...
-            if context_annotation_key is not None:
-                context_list = [
-                    c.annotations.get(
-                        context_annotation_key,
-                        '__none__',
-                    )
-                    for c in context_segmentation
-                ]
-            else:
-                context_list = [
-                    c.get_content() for c in context_segmentation
-                ]
-
             # Get the list of units in final format...
             if unit_annotation_key is not None:
                 unit_list = [
@@ -139,7 +125,14 @@ def count_in_context(
 
                 # Get and store context type...
                 if not contexts['merge']:
-                    context_type = context_list[context_index]
+                    if context_annotation_key is not None:
+                        context_type = context_segment.annotations.get(
+                            context_annotation_key,
+                            u'__none__',
+                        )
+                    else:
+                        context_type = context_segment.get_content()
+
                     if context_type not in context_types:
                         context_types.append(context_type)
 
@@ -1789,10 +1782,10 @@ def context(
             # Left and right context...
             unit_start = unit_token.start or 0
             unit_end = unit_token.end or \
-                len(Segmentation.data[unit_token.str_index])
+                len(Segmentation.get_data(unit_token.str_index))
             context_start = context_token.start or 0
             context_end = context_token.end or \
-                len(Segmentation.data[context_token.str_index])
+                len(Segmentation.get_data(context_token.str_index))
             if context_start < unit_start:
                 imm_left_start = max(
                     context_start,
@@ -1800,7 +1793,7 @@ def context(
                 )
                 if unit_start > imm_left_start:
                     new_values[(row_id, '__left__')] = \
-                        Segmentation.data[unit_token.str_index][
+                        Segmentation.get_data(unit_token.str_index)[
                             imm_left_start:unit_start
                         ]
                     has_imm_left = True
@@ -1811,7 +1804,7 @@ def context(
                 )
                 if imm_right_end > unit_end:
                     new_values[(row_id, '__right__')] = \
-                        Segmentation.data[unit_token.str_index][
+                        Segmentation.get_data(unit_token.str_index)[
                             unit_end:imm_right_end
                         ]
                     has_imm_right = True

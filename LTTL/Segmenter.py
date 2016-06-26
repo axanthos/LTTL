@@ -917,7 +917,6 @@ def import_xml(
     if conditions is None:
         conditions = dict()
     tag_regex = re.compile(r'</?[^/]+?/?>')
-    data = Segmentation.data
     stack = list()
     attr_stack = list()
     new_segmentation = Segmentation(list(), label)
@@ -927,7 +926,7 @@ def import_xml(
     def filter_segment(str_index, start, end, annotations):
         start = start or 0
         if end is None:
-            end = len(Segmentation.data[str_index])
+            end = len(Segmentation.get_data(str_index))
         if start == end:
             return False
         for (attr, value_regex) in conditions.items():
@@ -964,7 +963,7 @@ def import_xml(
             # Get tag position and parse it...
             tag_start = old_start + match.start()
             tag_end = old_start + match.end()
-            tag = data[old_str_index][tag_start:tag_end]
+            tag = Segmentation.get_data(old_str_index)[tag_start:tag_end]
             tag_desc = _parse_xml_tag(tag)
 
             # Get the address and annotations of potential new segments,
@@ -1126,6 +1125,10 @@ def recode(
     new_objects = list()
     backref = re.compile(r'&(?=[0-9]+)')
 
+    last_recoded = False
+    old_str_index = -1
+    new_str_index = -1
+
     # For each input segment...
     for segment in segmentation:
 
@@ -1160,17 +1163,28 @@ def recode(
             new_input.update(recoded_text, label)
             if copy_annotations:
                 new_input[0].annotations.update(segment.annotations.copy())
+            last_recoded = True
             new_objects.append(new_input)
 
         # Else if text was not modified, create and store new Segment...
         else:
+            # last segment was recoded and thus has a new str_index
+            if last_recoded and segment.str_index == old_str_index:
+                Segmentation.set_data(-1, old_str_index)
+                new_str_index = len(Segmentation.data) - 1
+            if segment.str_index != old_str_index:
+                old_str_index = segment.str_index
+                new_str_index = segment.str_index
+
             new_segment = Segment(
-                str_index=segment.str_index,
+                str_index=new_str_index,
                 start=segment.start,
                 end=segment.end,
             )
+
             if copy_annotations:
                 new_segment.annotations.update(segment.annotations)
+            last_recoded = False
             new_objects.append(new_segment)
 
         if progress_callback:

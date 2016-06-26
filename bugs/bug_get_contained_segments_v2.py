@@ -9,10 +9,11 @@ word_seg = Segmenter.tokenize(
     [(re.compile(r'\w+'), 'tokenize')],
 )
 
-vowel_seg = Segmenter.tokenize(
+consonant_seg = Segmenter.tokenize(
     input_seg,
-    [(re.compile(r'[aeiouy]'), 'tokenize')],
+    [(re.compile(r'[^aeiouy]'), 'tokenize')],
 )
 
-for seg in word_seg[1].get_contained_segments(vowel_seg):
+# Prints nothing (though 'n' is in 'un'
+for seg in word_seg[0].get_contained_segments(consonant_seg):
     print(seg.get_content())

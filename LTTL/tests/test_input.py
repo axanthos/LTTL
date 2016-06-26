@@ -56,7 +56,7 @@ class TestInput(unittest.TestCase):
         """Does creator store string in class variable?"""
         Input(u'test')
         self.assertEqual(
-            Segmentation.data[-1][:],
+            Segmentation.get_data(-1)[:],
             u'test',
             msg="creator doesn't store string in class variable!"
         )
@@ -66,7 +66,7 @@ class TestInput(unittest.TestCase):
         seg = Input(u'test2')
         seg.update(u'modified')
         self.assertEqual(
-            Segmentation.data[-1][:],
+            Segmentation.get_data(-1)[:],
             u'modified',
             msg="update doesn't modify stored string!"
         )
@@ -76,16 +76,16 @@ class TestInput(unittest.TestCase):
         seg = Input('test3')
         seg.clear()
         self.assertEqual(
-            Segmentation.data[-1],
+            Segmentation.get_data(-1),
             None,
             msg="clear doesn't set stored string to None!"
         )
 
     def test_slice_string(self):
-        """Does the slicing works like in strings"""
-        seg = Input('Hello world!')
+        """Does the slicing work like in strings"""
+        Input('Hello world!')
         self.assertEqual(
-            Segmentation.data[-1][3:7],
+            Segmentation.get_data(-1)[3:7],
             u"Hello world!"[3:7],
             msg="slicing doesn't return the same as in strings"
         )

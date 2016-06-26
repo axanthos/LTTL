@@ -38,7 +38,7 @@ class Input(Segmentation):
     def __init__(self, text=None, label='input_string', compressed=None):
         """Initialize an Input instance"""
         from .Segment import Segment
-        Segmentation.data.append(None)
+        Segmentation.set_data(-1, None)
         str_index = len(Segmentation.data) - 1
 
         Segmentation.__init__(self)
@@ -56,10 +56,13 @@ class Input(Segmentation):
         if compressed is None and text is not None:
             compressed = len(text) > MAX_TEXT_BEFORE_COMPRESS
         if compressed:
-            Segmentation.data[self[0].str_index] =  \
-                None if text is None else CompressedString(text)
+            Segmentation.set_data(
+                self[0].str_index, None
+                if text is None
+                else CompressedString(text)
+            )
         else:
-            Segmentation.data[self[0].str_index] = text
+            Segmentation.set_data(self[0].str_index, text)
         self.label = label
 
     def clear(self):

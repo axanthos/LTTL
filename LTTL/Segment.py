@@ -115,7 +115,7 @@ class Segment(object):
 
         str_index = self.str_index + offset
         start = (self.start or 0) + offset
-        end = self.end or len(Segmentation.data[self.str_index])
+        end = self.end or len(Segmentation.get_data(self.str_index))
 
         if progress_callback:
             progress_callback()
@@ -202,7 +202,7 @@ class Segment(object):
         # Format address section...
         str_index = self.str_index
         start = self.start or 0
-        end = self.end or len(Segmentation.data[str_index])
+        end = self.end or len(Segmentation.get_data(str_index))
         address_string = '<tr><td>%s</td><td>%s</td><td>%s</td></tr>\n' % (
             str_index + offset,
             start + offset,
@@ -248,7 +248,7 @@ class Segment(object):
 
         :return: a string with the segment's content.
         """
-        return Segmentation.data[self.str_index][self.start:self.end]
+        return Segmentation.get_data(self.str_index)[self.start:self.end]
 
     def deepcopy(self, annotations=None, update=True):
         """Return a deep copy of the segment
@@ -289,7 +289,7 @@ class Segment(object):
             return False
         if (self.start or 0) > (other_segment.start or 0):
             return False
-        string_length = len(Segmentation.data[self.str_index])
+        string_length = len(Segmentation.get_data(self.str_index))
         if (self.end or string_length) < (other_segment.end or string_length):
             return False
         return True
@@ -305,7 +305,7 @@ class Segment(object):
         """
         str_index = self.str_index
         start = self.start or 0
-        string_length = len(Segmentation.data[str_index])
+        string_length = len(Segmentation.get_data(str_index))
         end = self.end or string_length
         ret = list()
         try:
@@ -321,13 +321,18 @@ class Segment(object):
             # Binary search for start of relevant segments...
             while end_search - start_search > 1:
                 middle = segmentation[(end_search + start_search) // 2]
-                if (middle.start or 0) > start:
+                if (middle.start or 0) >= start:
                     end_search = (end_search + start_search) // 2
                 else:
                     start_search = (end_search + start_search) // 2
 
-            # Start iterating at this point...
-            for segment in segmentation[start_search:]:
+            # In case we need the very first segment...
+            if segmentation[start_search].start == start:
+                start_search -= 1
+
+            # Start iterating at this point (start_search always ends up
+            # on the segment just before the one we want)...
+            for segment in segmentation[start_search + 1:]:
                 # and stop when we reach the end
                 if (
                     str_index != segment.str_index or
@@ -351,7 +356,7 @@ class Segment(object):
         """
         str_index = self.str_index
         start = self.start or 0
-        string_length = len(Segmentation.data[str_index])
+        string_length = len(Segmentation.get_data(str_index))
         end = self.end or string_length
         ret = list()
         try:
@@ -417,7 +422,7 @@ class Segment(object):
             )
         return fixed_length_idx_sequences
 
-# Not currently used in LTTL or Textable, nor tested.
+# Not currently used in LTTL, nor tested.
 #    def contains_sequence(self, sequence):
 #        """Test if a sequence of segments is contained in this one"""
 #        for other_segment in sequence:
@@ -426,13 +431,13 @@ class Segment(object):
 #        return True
 
 
-# Not currently used in LTTL or Textable, nor tested.
+# Not currently used in LTTL, nor tested.
 #    def equals(self, other_segment):
 #        """Test if another segment has the same address as this one"""
 #        return self.contains(other_segment) and other_segment.contains(self)
 
 
-# Not currently used in LTTL or Textable, nor tested.
+# Not currently used in LTTL, nor tested.
 #    def get_contained_sequences(self, segmentation, length):
 #        """Return sequences of segments from another segmentation that are
 #        contained in this segment
