@@ -133,6 +133,7 @@ def concatenate(
                     _min = ptr
                     _argmin = i + 1
             segment = _min[2]
+            segmentation = merge_ptr[_argmin][0]
 
             # was it the last segment of this segmentation?
             if merge_ptr[_argmin][1] + 1 >= len(merge_ptr[_argmin][0]):
