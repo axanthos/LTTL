@@ -27,6 +27,7 @@ import LTTL.Segmenter as Segmenter
 import LTTL.Processor as Processor
 
 import re
+import sys
 
 import unittest
 
@@ -700,6 +701,17 @@ class TestCooc(unittest.TestCase):
         for col_type in self.output_cooc_in_context_ws_wa.col_type.values():
             self.assertEqual(col_type, 'continuous')
 
+    def assertItemsEqual(self, iterable1, iterable2):
+        if (sys.version_info > (3, 0)):
+            return super(TestCooc, self).assertCountEqual(
+                iterable1,
+                iterable2,
+            )
+        else:
+            return super(TestCooc, self).assertItemsEqual(
+                iterable1,
+                iterable2,
+            )
 
 if __name__ == '__main__':
     unittest.main(verbosity=42)

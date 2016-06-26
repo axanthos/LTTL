@@ -23,6 +23,7 @@ from __future__ import unicode_literals
 
 from math import sqrt
 from builtins import range
+from builtins import str as text
 
 from .Segmentation import Segmentation
 from .Table import *
@@ -411,7 +412,7 @@ def count_in_window(
 
                 # Get window type...
                 window_type = window_index + 1
-                window_str = unicode(window_type)
+                window_str = text(window_type)
 
                 # Update main counts...
                 freq.update(
@@ -461,7 +462,7 @@ def count_in_window(
 
                 # Get window type...
                 window_type = window_index + 1
-                window_str = unicode(window_type)
+                window_str = text(window_type)
                 # Update main counts...
                 freq.update(
                     dict(
@@ -478,7 +479,7 @@ def count_in_window(
     # Create pivot crosstab...
     return (
         IntPivotCrosstab(
-            [unicode(i) for i in range(1, window_type + 1)],
+            [text(i) for i in range(1, window_type + 1)],
             unit_types,
             freq,
             '__unit__',
@@ -1175,7 +1176,7 @@ def length_in_window(
                     sum_squares / window_size -
                     average * average
                 )
-                window_str = unicode(window_type)
+                window_str = text(window_type)
                 values[(window_str, '__length_average__')] = average
                 values[(window_str, '__length_std_deviation__')] = stdev
                 values[(window_str, '__length_count__')] = window_size
@@ -1227,7 +1228,7 @@ def length_in_window(
 
                 # Compute and store average and standard deviation...
                 average = sum_values / window_size
-                window_str = unicode(window_type)
+                window_str = text(window_type)
                 values[(window_str, '__length_average__')] = average
                 values[(window_str, '__length_count__')] = window_size
 
@@ -1244,7 +1245,7 @@ def length_in_window(
     # Create Table...
     return (
         Table(
-            [unicode(i) for i in range(1, window_type + 1)],
+            [text(i) for i in range(1, window_type + 1)],
             col_ids,
             values,
             '__col__',
@@ -1945,7 +1946,7 @@ def neighbors(
                         )
                     else:
                         string_value = left_token.get_content()
-                    new_values[(row_id, unicode(pos) + 'L')] = \
+                    new_values[(row_id, text(pos) + 'L')] = \
                         string_value
                 right_index = context_index + pos
                 if right_index < len(context_segmentation):
@@ -1957,7 +1958,7 @@ def neighbors(
                         )
                     else:
                         string_value = right_token.get_content()
-                    new_values[(row_id, unicode(pos) + 'R')] = \
+                    new_values[(row_id, text(pos) + 'R')] = \
                         string_value
 
         if progress_callback:
@@ -1965,9 +1966,9 @@ def neighbors(
 
     # Create table...
     col_ids = ['__pos__']
-    col_ids.extend([unicode(p) + 'L' for p in reversed(adjacent_positions)])
+    col_ids.extend([text(p) + 'L' for p in reversed(adjacent_positions)])
     col_ids.append('__key_segment__')
-    col_ids.extend([unicode(p) + 'R' for p in adjacent_positions])
+    col_ids.extend([text(p) + 'R' for p in adjacent_positions])
     if unit_annotation_key is not None and units['separate_annotation']:
         col_ids.append(unit_annotation_key)
     col_types = dict([(p, 'string') for p in col_ids])
