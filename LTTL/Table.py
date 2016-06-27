@@ -30,17 +30,16 @@ from __future__ import division
 from __future__ import absolute_import
 from __future__ import unicode_literals
 
-from .Utils import tuple_to_simple_dict_transpose
-
 import numpy as np
+from scipy.sparse import dok_matrix, isspmatrix
 
 import os
 import math
 import sys
+import six
 
 from builtins import str as text
 from future.utils import iteritems
-from past.builtins import xrange
 
 __version__ = "1.0.0"
 
@@ -62,6 +61,8 @@ class Table(object):
         class_col_id=None,
         missing=None,
         _cached_row_id=None,
+        row_mapping=None,
+        col_mapping=None,
     ):
         """Initialize a Table.
 
@@ -70,7 +71,10 @@ class Table(object):
         :param col_ids: list of items (usually strings) used as col ids
 
         :param values: dictionary containing storing values of the table's
-        cells; keys are (row_id, col_id) tuples.
+        cells; keys are (row_id, col_id) tuples. Or it can be a numpy array
+        that will be used directly as a dense matrix or a scipy.sparse matrix.
+        In the case of a dictionnary, all col_types are expected to be
+        identical.
 
         :param header_row_id: id of header row (default '__col__')
 
@@ -91,6 +95,14 @@ class Table(object):
         :param missing: value assigned to missing values (default None)
 
         :param _cached_row_id: not for use by client code.
+
+        :param row_mapping: dictionary mapping between the row name and the
+        row index. Only mandatory if the constructor is provided with
+        an already existing dok_matrix or numpy array.
+
+        :param col_mapping: dictionary mappaing between the row name and the
+        row index. Only mandatory if the constructor is provided with
+        an already existing dok_matrix or numpy array.
         """
 
         if col_type is None:
@@ -98,7 +110,29 @@ class Table(object):
 
         self.row_ids = row_ids
         self.col_ids = col_ids
-        self.values = values
+
+        if isinstance(values, np.ndarray) or isspmatrix(values):
+            self.row_mapping = row_mapping
+            self.col_mapping = col_mapping
+            self.values = values
+        else:
+            # it is a dictionnary -> create a dok_matrix
+            # here we guess the content type.
+            # Could be better if we could get it from the constructor
+            dtype = np.dtype(type(six.next(six.itervalues(values))))
+            self.row_mapping = {}
+            self.col_mapping = {}
+            self.values = dok_matrix((len(row_ids), len(col_ids)), dtype=dtype)
+            i = 0
+            j = 0
+            for k, v in iteritems(values):
+                if (k[0] not in self.row_mapping):
+                    self.row_mapping[k[0]] = i
+                    i += 1
+                if (k[1] not in self.col_mapping):
+                    self.col_mapping[k[1]] = j
+                    j += 1
+                self.values[self.row_mapping[k[0]], self.col_mapping[k[1]]] = v
         self.header_row_id = header_row_id
         self.header_row_type = header_row_type
         self.header_col_id = header_col_id
@@ -107,6 +141,26 @@ class Table(object):
         self.class_col_id = class_col_id
         self.missing = missing
         self._cached_row_id = _cached_row_id
+
+    def get(self, row, col, missing=None):
+        """
+        gets the item at coordinate (row, col)
+
+        :param row: the row name as in row_ids
+
+        :param col: the column name as in col_ids
+
+        :param missing: if not None, replaces the default missing value
+        of the class
+
+        :return: the item from the table or self.missing or missing
+
+        """
+        missing = self.missing if missing is None else missing
+        try:
+            return self.values.get(self.row_mapping[row], self.col_mapping[col], missing)
+        except:
+            return missing
 
     # TODO: test.
     def to_string(
@@ -173,7 +227,7 @@ class Table(object):
                 col_delimiter,
                 col_delimiter.join(
                     [
-                        text(self.values.get((row_id, col_id), missing))
+                        text(self.get(row_id, col_id, missing))
                         for col_id in self.col_ids
                     ]
                 )
@@ -252,9 +306,9 @@ class Table(object):
                                 values.append(value)
                     else:
                         for row_id in self.row_ids:
-                            if (row_id, col_id) in self.values:
-                                value = text(self.values[(row_id, col_id)])
-                                value = value.encode(
+                            _value = self.get(row_id, col_id, False)
+                            if _value is not False:
+                                value = _value.encode(
                                     encoding,
                                     errors='xmlcharrefreplace',
                                 )
@@ -283,7 +337,7 @@ class Table(object):
                     if col_id == self.header_col_id:
                         value = row_id
                     else:
-                        value = self.values.get((row_id, col_id), missing)
+                        value = self.get(row_id, col_id, missing)
                     if value:
                         value = text(value).encode(
                             encoding,
@@ -320,31 +374,31 @@ class Table(object):
         :return: a sorted copy of the table.
         """
 
-        # Initializations...
-        new_row_ids = list()
-        new_col_ids = list()
-
         # If a col id was specified as key for sorting rows...
         if key_col_id is not None:
 
             # If it is header col id, sort rows by id...
             if key_col_id == self.header_col_id:
-                new_row_ids.extend(sorted(self.row_ids, reverse=reverse_rows))
+                new_row_ids = sorted(self.row_ids, reverse=reverse_rows)
 
             # Otherwise sort rows by selected col...
             else:
-                values = [
-                    self.values.get((row_id, key_col_id), self.missing)
-                    for row_id in self.row_ids
-                ]
-                new_row_ids.extend(
-                    [
-                        x[1] for x in sorted(
-                            zip(values, self.row_ids),
-                            reverse=reverse_rows
-                        )
-                    ]
-                )
+                unmapping = [''] * len(self.row_ids)
+                for k, v in iteritems(self.row_mapping):
+                    unmapping[v] = k
+                col = self.col_mapping[key_col_id]
+                if isinstance(self.values, np.array):
+                    order = np.argsort(self.values[:, col], 0)
+                # dok_matrix of strings cannot be converted to an array
+                elif self.values.dtype == np.dtype('<U'):
+                    order = np.argsort([self.values[x, col]
+                                        for x in range(len(self.row_ids))], 0)
+                else:
+                    order = np.argsort(self.values[:, col].A[:, 0], 0)
+                if reverse_rows:
+                    new_row_ids = [unmapping[x] for x in order]
+                else:
+                    new_row_ids = [unmapping[x] for x in reversed(order)]
         # Else if no col id was specified for sorting rows, copy them directly.
         else:
             new_row_ids = self.row_ids[:]
@@ -354,22 +408,26 @@ class Table(object):
 
             # If it is header row id, sort cols by id...
             if key_row_id == self.header_row_id:
-                new_col_ids.extend(sorted(self.col_ids, reverse=reverse_cols))
+                new_col_ids = sorted(self.col_ids, reverse=reverse_cols)
 
             # Otherwise sort cols by selected row...
             else:
-                values = [
-                    self.values.get((key_row_id, col_id), self.missing)
-                    for col_id in self.col_ids
-                ]
-                new_col_ids.extend(
-                    [
-                        x[1] for x in sorted(
-                            zip(values, self.col_ids),
-                            reverse=reverse_cols
-                        )
-                    ]
-                )
+                unmapping = [''] * len(self.col_ids)
+                for k, v in iteritems(self.col_mapping):
+                    unmapping[v] = k
+                row = self.row_mapping[key_row_id]
+                if isinstance(self.values, np.array):
+                    order = np.argsort(self.values[row, :], 0)
+                # dok_matrix of strings cannot be converted to an array
+                elif self.values.dtype == np.dtype('<U'):
+                    order = np.argsort([self.values[row, x]
+                                        for x in range(len(self.col_ids))], 0)
+                else:
+                    order = np.argsort(self.values[row, :].A[0], 0)
+                if reverse_cols:
+                    new_col_ids = [unmapping[x] for x in order]
+                else:
+                    new_col_ids = [unmapping[x] for x in reversed(order)]
         # Else if no row id was specified for sorting cols, copy them directly.
         else:
             new_col_ids = self.col_ids[:]
@@ -399,6 +457,8 @@ class Table(object):
             self.class_col_id,
             self.missing,
             self._cached_row_id,
+            self.row_mapping,
+            self.col_mapping,
         )
 
     # Todo: test.
@@ -430,6 +490,8 @@ class Table(object):
             self.class_col_id,
             self.missing,
             self._cached_row_id,
+            self.row_mapping.copy(),
+            self.col_mapping.copy(),
         )
 
 
@@ -459,6 +521,8 @@ class Crosstab(Table):
 
 class PivotCrosstab(Crosstab):
     """A class for storing crosstabs in 'pivot' format.
+    It is always represented as a dok_matrix in the backend,
+    which dtype is always numerical (int or float).
 
     Example:
                --------+-------+
@@ -477,10 +541,7 @@ class PivotCrosstab(Crosstab):
         return PivotCrosstab(
             self.col_ids[:],
             new_col_ids,
-            dict(
-                (tuple(reversed(key)), count)
-                for key, count in iteritems(self.values)
-            ),
+            self.values.transpose(),
             self.header_col_id,
             self.header_col_type,
             self.header_row_id,
@@ -489,6 +550,8 @@ class PivotCrosstab(Crosstab):
             None,
             self.missing,
             self.header_col_id,    # TODO: check this (was self._cached_row_id).
+            self.col_mapping.copy(),
+            self.row_mapping.copy(),
         )
 
     # TODO: test.
@@ -518,22 +581,20 @@ class PivotCrosstab(Crosstab):
 
         # Prepare values dict and row ids for converted table...
         row_counter = 1
-        new_values = dict()
-        new_row_ids = list()
-        get_count = self.values.get
-        first_col_id = new_col_ids[0]
+        new_values = np.array((self.values.nnz, 3),
+                              dtype=[np.dtype('str'),
+                                     np.dtype('str'),
+                                     np.float32]
+                              )
+        new_row_ids = list(range(1, self.values.nnz + 1))
         for row_id in self.row_ids:
             for col_id in self.col_ids:
-                count = get_count((row_id, col_id), 0)
+                count = self.get(row_id, col_id, 0)
                 if count == 0:
                     continue
-                # new_row_id = text(row_counter)
-                new_row_id = row_counter    # TODO: check (was previous line)
-                new_row_ids.append(new_row_id)
-                new_values[(new_row_id, first_col_id)] = col_id
-                if num_row_ids > 1:
-                    new_values[(new_row_id, second_col_id)] = row_id
-                new_values[(new_row_id, '__weight__')] = count
+                new_values[row_counter, 0] = col_id
+                new_values[row_counter, 1] = row_id
+                new_values[row_counter, 2] = count
                 row_counter += 1
             if progress_callback:
                 progress_callback()
@@ -548,32 +609,16 @@ class PivotCrosstab(Crosstab):
             class_col_id=None,
             missing=self.missing,
             _cached_row_id=new_cached_row_id,
+            row_mapping=dict(map(reversed, enumerate(new_row_ids))),
+            col_mapping=dict(map(reversed, enumerate(new_col_ids))),
         )
 
     # TODO: test.
     def to_numpy(self):
-        """Return a numpy array with the content of a crosstab"""
+        """Return a numpy array with the content of a crosstab
+        It is undefined for dtype string"""
 
-        # Set numpy table type based on the crosstab's type...
-        if isinstance(self, IntPivotCrosstab):
-            np_type = np.dtype(np.int32)
-        elif isinstance(self, PivotCrosstab):
-            np_type = np.dtype(np.float32)
-
-        # Initialize numpy table...
-        np_table = np.empty([len(self.row_ids), len(self.col_ids)], np_type)
-        np_table.fill(self.missing or 0)
-
-        # Fill and return numpy table...
-        for row_idx in xrange(len(self.row_ids)):
-            for col_idx in xrange(len(self.col_ids)):
-                try:
-                    np_table[row_idx][col_idx] = self.values[
-                        (self.row_ids[row_idx], self.col_ids[col_idx])
-                    ]
-                except KeyError:
-                    pass
-        return np_table
+        return self.values.A
 
     # TODO: test.
     @classmethod
@@ -624,10 +669,13 @@ class PivotCrosstab(Crosstab):
         :return: a PivotCrosstab or IntPivotCrosstab with the data from the
         input numpy array.
         """
-        table_values = dict()
-        for i, row in enumerate(np_array):
-            for j, value in enumerate(row):
-                table_values[(row_ids[i], col_ids[j])] = value
+        table_values = dok_matrix(np_array)
+
+        # build the mapping assuming order given by row/col_ids is the same
+        # as in the np array
+        row_mapping = dict(map(reversed, enumerate(row_ids)))
+        col_mapping = dict(map(reversed, enumerate(col_ids)))
+
         if cls == IntPivotCrosstab:
             if not issubclass(np_array.dtype.type, np.integer):
                 raise ValueError(
@@ -645,6 +693,8 @@ class PivotCrosstab(Crosstab):
             class_col_id,
             missing,
             _cached_row_id,
+            row_mapping,
+            col_mapping,
         )
 
 
@@ -685,178 +735,77 @@ class IntPivotCrosstab(PivotCrosstab):
         :return: normalized copy of crosstab
         """
         new_values = dict()
-        denominator = 0
         if mode == 'rows':
             table_class = PivotCrosstab
-            col_ids = self.col_ids
-            for row_id in self.row_ids:
-                row_values = [
-                    self.values.get((row_id, col_id), 0)
-                    for col_id in col_ids
-                    ]
-                if type == 'l1':
-                    denominator = sum(row_values)
-                elif type == 'l2':
-                    denominator = math.sqrt(sum([v * v for v in row_values]))
-                if denominator > 0:
-                    new_values.update(zip(
-                        [(row_id, col_id) for col_id in col_ids],
-                        [v / denominator for v in row_values]
-                    ))
-                else:
-                    new_values.update(zip(
-                        [(row_id, col_id) for col_id in col_ids],
-                        [0 for v in row_values]
-                    ))
-                if progress_callback:
-                    progress_callback()
+            if type == 'l1':
+                new_values = dok_matrix(np.nan_to_num(self.values /
+                                        self.values.sum(1)))
+            elif type == 'l2':
+                new_values = dok_matrix(np.nan_to_num(self.values /
+                                        np.sqrt(self.values.power(2).sum(1))))
         elif mode == 'columns':
             table_class = PivotCrosstab
-            row_ids = self.row_ids
-            for col_id in self.col_ids:
-                col_values = [
-                    self.values.get((row_id, col_id), 0)
-                    for row_id in row_ids
-                    ]
-                if type == 'l1':
-                    denominator = sum(col_values)
-                elif type == 'l2':
-                    denominator = math.sqrt(sum([v * v for v in col_values]))
-                if denominator > 0:
-                    new_values.update(zip(
-                        [(row_id, col_id) for row_id in row_ids],
-                        [v / denominator for v in col_values]
-                    ))
-                else:
-                    new_values.update(zip(
-                        [(row_id, col_id) for row_id in row_ids],
-                        [0 for v in col_values]
-                    ))
-                if progress_callback:
-                    progress_callback()
+            if type == 'l1':
+                new_values = dok_matrix(np.nan_to_num(self.values /
+                                        self.values.sum(0)))
+            elif type == 'l2':
+                new_values = dok_matrix(np.nan_to_num(self.values /
+                                        np.sqrt(self.values.power(2).sum(0))))
         elif mode == 'table':
             table_class = PivotCrosstab
-            values = reduce(list.__add__, [
-                [
-                    self.values.get((row_id, col_id), 0)
-                    for row_id in self.row_ids
-                    ]
-                for col_id in self.col_ids
-                ])
             if type == 'l1':
-                denominator = sum(values)
+                new_values = dok_matrix(self.values / self.values.sum())
             elif type == 'l2':
-                denominator = math.sqrt(sum([v * v for v in values]))
-            if denominator > 0:
-                new_values.update(zip(
-                    reduce(list.__add__, [
-                        [(row_id, col_id) for row_id in self.row_ids]
-                        for col_id in self.col_ids
-                        ]),
-                    [v / denominator for v in values]
-                ))
-            else:
-                new_values.update(zip(
-                    reduce(list.__add__, [
-                        [(row_id, col_id) for row_id in self.row_ids]
-                        for col_id in self.col_ids
-                        ]),
-                    [0 for v in values]
-                ))
+                new_values = dok_matrix(self.values /
+                                        math.sqrt(self.values.power(2).sum()))
         elif mode == 'presence/absence':
             table_class = IntPivotCrosstab
-            row_ids = self.row_ids
-            col_ids = self.col_ids
-            for col_id in col_ids:
-                for row_id in row_ids:
-                    try:
-                        value = self.values[(row_id, col_id)]
-                        new_values[(row_id, col_id)] = 1 if value > 0 else 0
-                    except KeyError:
-                        pass
-                    if progress_callback:
-                        progress_callback()
+            new_values = dok_matrix(np.nan_to_num(self.values / self.values))
         elif mode == 'quotients':
             table_class = PivotCrosstab
-            row_ids = self.row_ids
-            col_ids = self.col_ids
-            col_total = list()
-            for col_id in col_ids:
-                col_values = [
-                    self.values.get((row_id, col_id), 0)
-                    for row_id in row_ids
-                    ]
-                col_total.append(sum(col_values))
-                if progress_callback:
-                    progress_callback()
-            total = sum(col_total)
-            for row_id in row_ids:
-                row_values = [
-                    self.values.get((row_id, col_id), 0)
-                    for col_id in col_ids
-                    ]
-                row_total = sum(row_values)
-                for col_idx in xrange(len(col_ids)):
-                    freq_under_indep = row_total * col_total[col_idx]
-                    if freq_under_indep > 0:
-                        new_values[(row_id, col_ids[col_idx])] = (
-                            (row_values[col_idx] * total)
-                            /
-                            freq_under_indep
-                        )
-                    if progress_callback:
-                        progress_callback()
+            new_values = dok_matrix(np.nan_to_num(self.values *
+                                                  self.values.sum() /
+                                                  (self.values.sum(1) *
+                                                   self.values.sum(0))
+                                                  )
+                                    )
         elif mode == 'TF-IDF':
             table_class = PivotCrosstab
-            row_ids = self.row_ids
-            for col_id in self.col_ids:
-                col_values = [
-                    self.values.get((row_id, col_id), 0)
-                    for row_id in row_ids
-                    ]
-                col_occurrences = [1 for v in col_values if v > 0]
-                df = sum(col_occurrences)
-                if df > 0:
-                    idf = math.log(len(row_ids) / df)
-                    new_values.update(zip(
-                        [(row_id, col_id) for row_id in row_ids],
-                        [v * idf for v in col_values]
-                    ))
-                else:
-                    new_values.update(zip(
-                        [(row_id, col_id) for row_id in row_ids],
-                        [0 for v in col_values]
-                    ))
-                if progress_callback:
-                    progress_callback()
-        return (
-            table_class(
-                list(self.row_ids),
-                list(self.col_ids),
-                new_values,
-                self.header_row_id,
-                self.header_row_type,
-                self.header_col_id,
-                self.header_col_type,
-                dict(self.col_type),
-                None,
-                self.missing,
-                self._cached_row_id,
+            new_values = dok_matrix(
+                np.nan_to_num(
+                    np.multiply(self.values.todense(),
+                                np.log(len(self.row_ids) /
+                                       np.nan_to_num(self.values /
+                                                     self.values
+                                                     ).sum(0)
+                                       )
+
+                                )
+                    )
             )
-        )
+
+        return (table_class(
+            list(self.row_ids),
+            list(self.col_ids),
+            new_values,
+            self.header_row_id,
+            self.header_row_type,
+            self.header_col_id,
+            self.header_col_type,
+            dict(self.col_type),
+            None,
+            self.missing,
+            self._cached_row_id,
+            self.row_mapping,
+            self.col_mapping,
+        ))
 
     def to_document_frequency(self, progress_callback=None):
         """Return a table with document frequencies based on the crosstab"""
         context_type = '__document_frequency__'
-        document_freq = dict()
-        for col_id in self.col_ids:
-            unit_profile = tuple_to_simple_dict_transpose(
-                self.values,
-                col_id
-            )
-            document_freq[(context_type, col_id)] = len(unit_profile)
-            if progress_callback:
-                progress_callback()
+        document_freq = dok_matrix(np.nan_to_num(self.values /
+                                                 self.values
+                                                 ).sum(0))
         return (
             IntPivotCrosstab(
                 [context_type],
@@ -870,6 +819,8 @@ class IntPivotCrosstab(PivotCrosstab):
                 None,
                 0,
                 None,
+                self.row_mapping.copy(),
+                {context_type: 0},
             )
         )
 
@@ -901,21 +852,7 @@ class IntPivotCrosstab(PivotCrosstab):
         else:
             pi_inv = np.diag(1 / (sum_col / total_freq))
             output_matrix = np.dot(pi_inv, np.dot(exchange, pi_inv))
-        col_ids = self.col_ids
-        values = dict()
-        for col_id_idx1 in xrange(len(col_ids)):
-            col_id1 = text(col_ids[col_id_idx1])
-            values.update(
-                dict(
-                    (
-                        (col_id1, text(col_ids[i])),
-                        output_matrix[col_id_idx1, i]
-                    )
-                    for i in xrange(len(col_ids))
-                )
-            )
-            if progress_callback:
-                progress_callback()
+        values = dok_matrix(output_matrix)
         return (
             PivotCrosstab(
                 self.col_ids[:],
@@ -924,6 +861,8 @@ class IntPivotCrosstab(PivotCrosstab):
                 header_col_id='__unit__',
                 header_col_type='string',
                 col_type=self.col_type.copy(),
+                row_mapping=self.col_mapping.copy(),
+                col_mapping=self.col_mapping.copy(),
             )
         )
 
@@ -947,8 +886,8 @@ class IntPivotCrosstab(PivotCrosstab):
         first_col_id = new_col_ids[0]
         for row_id in self.row_ids:
             for col_id in self.col_ids:
-                count = get_count((row_id, col_id), 0)
-                for i in xrange(count):
+                count = get_count(row_id, col_id, 0)
+                for i in range(count):
                     new_row_id = text(row_counter)
                     new_row_ids.append(new_row_id)
                     new_values[(new_row_id, first_col_id)] = col_id
@@ -1011,6 +950,25 @@ class FlatCrosstab(Crosstab):
     +----------+-------+
     """
 
+    def get(self, row, col, missing=None):
+        """
+        gets the item at coordinate (row, col)
+
+        :param row: the row name as in row_ids
+
+        :param col: the column name as in col_ids
+
+        :param missing: if not None, replaces the default missing value
+        of the class
+
+        :return: the item from the table or self.missing or missing
+
+        """
+        try:
+            return self.values[self.row_mapping[row], self.col_mapping[col]]
+        except:
+            return self.missing if missing is None else missing
+
     def to_pivot(self, progress_callback=None):
         """Return a copy of the crosstab in 'pivot' format"""
         new_header_row_id = self.col_ids[0]
@@ -1019,7 +977,7 @@ class FlatCrosstab(Crosstab):
         new_header_col_type = 'discrete'
         new_col_ids = Crosstab.get_unique_items(
             [
-                self.values[(row_id, new_header_row_id)]
+                self.get(row_id, new_header_row_id)
                 for row_id in self.row_ids
             ]
         )
@@ -1030,15 +988,15 @@ class FlatCrosstab(Crosstab):
             new_row_ids.extend(
                 Crosstab.get_unique_items(
                     [
-                        self.values[(row_id, new_header_col_id)]
+                        self.get(row_id, new_header_col_id)
                         for row_id in self.row_ids
                     ]
                 )
             )
             for row_id in self.row_ids:
                 pair = (
-                    self.values[row_id, new_header_col_id],
-                    self.values[row_id, new_header_row_id],
+                    self.get(row_id, new_header_col_id),
+                    self.get(row_id, new_header_row_id),
                 )
                 new_values[pair] = new_values.get(pair, 0) + 1
                 if progress_callback:
@@ -1052,7 +1010,7 @@ class FlatCrosstab(Crosstab):
             for row_id in self.row_ids:
                 pair = (
                     cached_row_id,
-                    self.values[row_id, new_header_row_id],
+                    self.get(row_id, new_header_row_id),
                 )
                 new_values[pair] = new_values.get(pair, 0) + 1
                 if progress_callback:
@@ -1154,6 +1112,25 @@ class WeightedFlatCrosstab(Crosstab):
     +----------+-------+-------+
     """
 
+    def get(self, row, col, missing=None):
+        """
+        gets the item at coordinate (row, col)
+
+        :param row: the row name as in row_ids
+
+        :param col: the column name as in col_ids
+
+        :param missing: if not None, replaces the default missing value
+        of the class
+
+        :return: the item from the table or self.missing or missing
+
+        """
+        try:
+            return self.values[self.row_mapping[row], self.col_mapping[col]]
+        except:
+            return self.missing if missing is None else missing
+
     def to_pivot(self, progress_callback=None):
         """Return a copy of the crosstab in 'pivot' format"""
         new_header_row_id = self.col_ids[0]
@@ -1162,7 +1139,7 @@ class WeightedFlatCrosstab(Crosstab):
         new_header_col_type = 'discrete'
         new_col_ids = Crosstab.get_unique_items(
             [
-                self.values[(row_id, new_header_row_id)]
+                self.get(row_id, new_header_row_id)
                 for row_id in self.row_ids
             ]
         )
@@ -1172,16 +1149,16 @@ class WeightedFlatCrosstab(Crosstab):
             new_header_col_id = self.col_ids[1]
             new_row_ids.extend(Crosstab.get_unique_items(
                 [
-                    self.values[(row_id, new_header_col_id)]
+                    self.get(row_id, new_header_col_id)
                     for row_id in self.row_ids
                 ]
             ))
             for row_id in self.row_ids:
                 pair = (
-                    self.values[row_id, new_header_col_id],
-                    self.values[row_id, new_header_row_id],
+                    self.get(row_id, new_header_col_id),
+                    self.get(row_id, new_header_row_id),
                 )
-                new_values[pair] = self.values[row_id, '__weight__']
+                new_values[pair] = self.get(row_id, '__weight__')
                 if progress_callback:
                     progress_callback()
         else:
@@ -1193,9 +1170,9 @@ class WeightedFlatCrosstab(Crosstab):
             for row_id in self.row_ids:
                 pair = (
                     cached_row_id,
-                    self.values[row_id, new_header_row_id],
+                    self.get(row_id, new_header_row_id),
                 )
-                new_values[pair] = self.values[row_id, '__weight__']
+                new_values[pair] = self.get(row_id, '__weight__')
                 if progress_callback:
                     progress_callback()
         return (
@@ -1239,10 +1216,10 @@ class IntWeightedFlatCrosstab(WeightedFlatCrosstab):
             first_col_id = self.col_ids[0]
             second_col_id = self.col_ids[1]
             for row_id in self.row_ids:
-                count = self.values[(row_id, '__weight__')]
-                first_col_value = self.values[row_id, first_col_id]
-                second_col_value = self.values[row_id, second_col_id]
-                for i in xrange(count):
+                count = self.get(row_id, '__weight__')
+                first_col_value = self.get(row_id, first_col_id)
+                second_col_value = self.get(row_id, second_col_id)
+                for i in range(count):
                     new_row_id = text(row_counter)
                     new_row_ids.append(new_row_id)
                     new_values[(new_row_id, first_col_id)] = first_col_value
@@ -1253,9 +1230,9 @@ class IntWeightedFlatCrosstab(WeightedFlatCrosstab):
         else:
             col_id = self.col_ids[0]
             for row_id in self.row_ids:
-                count = self.values[(row_id, '__weight__')]
-                col_value = self.values[row_id, col_id]
-                for i in xrange(count):
+                count = self.get(row_id, '__weight__')
+                col_value = self.get(row_id, col_id)
+                for i in range(count):
                     new_row_id = text(row_counter)
                     new_row_ids.append(new_row_id)
                     new_values[(new_row_id, col_id)] = col_value
