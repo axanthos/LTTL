@@ -95,7 +95,7 @@ def concatenate(
     new_segments.label = label
 
     # ordered list of all unique str_index involved
-    str_indices = []
+    str_indices = list()
     for segmentation in segmentations:
         for k in segmentation.str_index_ptr.keys():
             if k not in str_indices:
@@ -108,7 +108,7 @@ def concatenate(
     # For each str_index...
     for index in str_indices:
 
-        merge_ptr = []
+        merge_ptr = list()
 
         # Get all input segmentations using this str_index...
         for segmentation in segmentations:
@@ -922,6 +922,9 @@ def import_xml(
     attr_stack = list()
     new_segmentation = Segmentation(list(), label)
 
+    # Remove angle brackets from element if necessary...
+    element = element.replace('<', '').replace('>', '')
+
     # Inner helper for removing segments that are empty or don't match
     # attribute regexes...
     def filter_segment(str_index, start, end, annotations):
@@ -938,7 +941,7 @@ def import_xml(
                 return False
         return True
 
-    temp_segments = []
+    temp_segments = list()
 
     # For each input segment...
     for old_segment in segmentation:
