@@ -120,18 +120,12 @@ class Table(object):
             # here we guess the content type.
             # Could be better if we could get it from the constructor
             dtype = np.dtype(type(six.next(six.itervalues(values))))
-            self.row_mapping = {}
-            self.col_mapping = {}
+            # build the mapping by taking the initial order of
+            # row/col_ids
+            self.row_mapping = dict(map(reversed, enumerate(row_ids)))
+            self.col_mapping = dict(map(reversed, enumerate(col_ids)))
             self.values = dok_matrix((len(row_ids), len(col_ids)), dtype=dtype)
-            i = 0
-            j = 0
             for k, v in iteritems(values):
-                if (k[0] not in self.row_mapping):
-                    self.row_mapping[k[0]] = i
-                    i += 1
-                if (k[1] not in self.col_mapping):
-                    self.col_mapping[k[1]] = j
-                    j += 1
                 self.values[self.row_mapping[k[0]], self.col_mapping[k[1]]] = v
         self.header_row_id = header_row_id
         self.header_row_type = header_row_type
@@ -158,13 +152,13 @@ class Table(object):
         """
         missing = self.missing if missing is None else missing
         try:
-            return self.values.get(self.row_mapping[row], self.col_mapping[col], missing)
+            return self.values.get((self.row_mapping[row], self.col_mapping[col]), missing)
         except:
             return missing
 
     def to_dict(self):
         """
-        innefficient, just for comparing output for testing
+        inefficient, just for comparing output for testing
         """
         out = dict()
         rev_cols = dict(map(reversed, self.col_mapping.items()))
@@ -398,7 +392,7 @@ class Table(object):
                 for k, v in iteritems(self.row_mapping):
                     unmapping[v] = k
                 col = self.col_mapping[key_col_id]
-                if isinstance(self.values, np.array):
+                if isinstance(self.values, type(np.array)):
                     order = np.argsort(self.values[:, col], 0)
                 # dok_matrix of strings cannot be converted to an array
                 elif self.values.dtype == np.dtype('<U'):
@@ -406,10 +400,11 @@ class Table(object):
                                         for x in range(len(self.row_ids))], 0)
                 else:
                     order = np.argsort(self.values[:, col].A[:, 0], 0)
+
                 if reverse_rows:
-                    new_row_ids = [unmapping[x] for x in order]
-                else:
                     new_row_ids = [unmapping[x] for x in reversed(order)]
+                else:
+                    new_row_ids = [unmapping[x] for x in order]
         # Else if no col id was specified for sorting rows, copy them directly.
         else:
             new_row_ids = self.row_ids[:]
@@ -427,7 +422,7 @@ class Table(object):
                 for k, v in iteritems(self.col_mapping):
                     unmapping[v] = k
                 row = self.row_mapping[key_row_id]
-                if isinstance(self.values, np.array):
+                if isinstance(self.values, type(np.array)):
                     order = np.argsort(self.values[row, :], 0)
                 # dok_matrix of strings cannot be converted to an array
                 elif self.values.dtype == np.dtype('<U'):
@@ -436,9 +431,9 @@ class Table(object):
                 else:
                     order = np.argsort(self.values[row, :].A[0], 0)
                 if reverse_cols:
-                    new_col_ids = [unmapping[x] for x in order]
-                else:
                     new_col_ids = [unmapping[x] for x in reversed(order)]
+                else:
+                    new_col_ids = [unmapping[x] for x in order]
         # Else if no row id was specified for sorting cols, copy them directly.
         else:
             new_col_ids = self.col_ids[:]
@@ -566,7 +561,7 @@ class PivotCrosstab(Crosstab):
         )
 
     # TODO: test.
-    def to_weighted_flat(self, progress_callback=None):
+    def to_weighted_flat(self, progress_callback=None, dtype=np.float):
         """Convert the crosstab in 'weighted and flat' format
 
         :param progress_callback: callback for monitoring progress ticks (number
@@ -590,12 +585,11 @@ class PivotCrosstab(Crosstab):
         new_col_ids.append('__weight__')
         new_col_type['__weight__'] = 'continuous'
 
-        # Prepare values dict and row ids for converted table...
-        row_counter = 1
-        new_values = np.array((self.values.nnz, 3),
-                              dtype=[np.dtype('str'),
-                                     np.dtype('str'),
-                                     np.float32]
+        row_counter = 0
+        new_values = np.empty((self.values.nnz),
+                              dtype=np.dtype([('col', np.dtype('object')),
+                                     ('row', np.dtype('object')),
+                                     ('val', dtype)])
                               )
         new_row_ids = list(range(1, self.values.nnz + 1))
         for row_id in self.row_ids:
@@ -603,13 +597,10 @@ class PivotCrosstab(Crosstab):
                 count = self.get(row_id, col_id, 0)
                 if count == 0:
                     continue
-                new_values[row_counter, 0] = col_id
-                new_values[row_counter, 1] = row_id
-                new_values[row_counter, 2] = count
+                new_values[row_counter] = (col_id, row_id, count)
                 row_counter += 1
             if progress_callback:
                 progress_callback()
-
         return WeightedFlatCrosstab(
             new_row_ids,
             new_col_ids,
@@ -687,7 +678,7 @@ class PivotCrosstab(Crosstab):
         col_mapping = dict(map(reversed, enumerate(col_ids)))
 
         if cls == IntPivotCrosstab:
-            if not issubclass(np_array.dtype.type, np.int32):
+            if not issubclass(np_array.dtype.type, np.integer):
                 raise ValueError(
                     'Cannot cast non-integer numpy array to IntPivotCrosstab.'
                 )
@@ -829,8 +820,8 @@ class IntPivotCrosstab(PivotCrosstab):
                 None,
                 0,
                 None,
-                self.row_mapping.copy(),
                 {context_type: 0},
+                self.col_mapping.copy(),
             )
         )
 
@@ -841,7 +832,7 @@ class IntPivotCrosstab(PivotCrosstab):
         # orange_table = self.to_orange_table('utf8')
         # freq_table = Orange.data.preprocess.RemoveDiscrete(orange_table)
         # freq = freq_table.to_numpy()[0]
-        freq = self.to_numpy()[0]   # TODO: check (was previous 2 lines)
+        freq = self.to_numpy()  # TODO: check (was previous 2 lines)
         if self.header_col_type == 'continuous':
             freq = freq[::, 1::]
         total_freq = freq.sum()
@@ -888,8 +879,8 @@ class IntPivotCrosstab(PivotCrosstab):
 
         for row_id in self.row_ids:
             for col_id in self.col_ids:
-                count = self.values.get(row_id, col_id, 0)
-                new_values.extend([[row_id, col_id]] * count)
+                count = self.get(row_id, col_id, 0)
+                new_values.extend([[col_id, row_id]] * count)
             if progress_callback:
                 progress_callback()
 
@@ -916,7 +907,8 @@ class IntPivotCrosstab(PivotCrosstab):
         integer values
         """
         weighted_flat = super(IntPivotCrosstab, self).to_weighted_flat(
-            progress_callback=progress_callback
+            progress_callback=progress_callback,
+            dtype=np.int,
         )
         weighted_flat.__class__ = IntWeightedFlatCrosstab
         return weighted_flat
@@ -973,7 +965,7 @@ class FlatCrosstab(Crosstab):
 
         """
         try:
-            return self.values[row, self.col_mapping[col]]
+            return self.values[row - 1, self.col_mapping[col]]
         except:
             return self.missing if missing is None else missing
 
@@ -983,15 +975,15 @@ class FlatCrosstab(Crosstab):
         new_header_row_type = 'discrete'
         new_header_col_id = self.col_ids[1]
         new_header_col_type = 'discrete'
-        new_col_ids = np.unique(self.values[:, 0]).tolist()
-        new_row_ids = np.unique(self.values[:, 1]).tolist()
+        new_col_ids = np.unique(self.values[:, 1]).tolist()
+        new_row_ids = np.unique(self.values[:, 0]).tolist()
         row_mapping = dict(map(reversed, enumerate(new_row_ids)))
         col_mapping = dict(map(reversed, enumerate(new_col_ids)))
         new_values = dok_matrix((len(new_row_ids), len(new_col_ids)), dtype=np.int32)
 
         for i in range(self.values.shape[0]):
-            row = row_mapping[self.values[i, 1]]
-            col = col_mapping[self.values[i, 0]]
+            row = row_mapping[self.values[i, 0]]
+            col = col_mapping[self.values[i, 1]]
             new_values[row, col] = new_values[row, col] + 1
             if progress_callback:
                 progress_callback()
@@ -1022,21 +1014,28 @@ class FlatCrosstab(Crosstab):
         previous_row = None
         previous_count = 0
         for row_id in self.row_ids:
-
-            if previous_row == self.values[row_id, :]:
+            if previous_row is not None and (previous_row == self.values[row_id - 1, :]).all():
                 previous_count += 1
             else:
                 if previous_count > 0:
-                    new_values.append([self.values[row_id, 0],
-                                       self.values[row_id, 1],
-                                       previous_count]
+                    new_values.append((previous_row[0],
+                                       previous_row[1],
+                                       previous_count)
                                       )
-                previous_row = self.values[row_id, :]
+                previous_row = self.values[row_id - 1, :]
                 previous_count = 1
             if progress_callback:
                 progress_callback()
-        new_row_ids = list(range(1, len(new_values)))
-        new_values = np.array(new_values)
+        new_values.append((previous_row[0],
+                            previous_row[1],
+                            previous_count)
+                        )
+        new_row_ids = list(range(1, len(new_values) + 1))
+        new_values = np.array(new_values, dtype=np.dtype([('col', np.dtype('object')),
+                                     ('row', np.dtype('object')),
+                                     ('val', np.dtype('int'))])
+                              )
+
         new_col_ids.append('__weight__')
         new_col_type['__weight__'] = 'continuous'
         return (
@@ -1089,7 +1088,7 @@ class WeightedFlatCrosstab(Crosstab):
 
         """
         try:
-            return self.values[row, self.col_mapping[col]]
+            return self.values[row - 1][self.col_mapping[col]]
         except:
             return self.missing if missing is None else missing
 
@@ -1099,18 +1098,19 @@ class WeightedFlatCrosstab(Crosstab):
         new_header_row_type = 'discrete'
         new_header_col_id = self.col_ids[1]
         new_header_col_type = 'discrete'
-        new_col_ids = np.unique(self.values[:, 0]).tolist()
-        new_row_ids = np.unique(self.values[:, 1]).tolist()
+        new_col_ids = np.unique([x[0] for x in self.values]).tolist()
+        new_row_ids = np.unique([x[1] for x in self.values]).tolist()
         row_mapping = dict(map(reversed, enumerate(new_row_ids)))
         col_mapping = dict(map(reversed, enumerate(new_col_ids)))
-        new_values = dok_matrix((len(new_row_ids), len(new_col_ids)), dtype=np.float32)
+        new_values = dok_matrix((len(new_row_ids), len(new_col_ids)), dtype=np.float)
 
         for i in range(self.values.shape[0]):
-            row = row_mapping[self.values[i, 1]]
-            col = col_mapping[self.values[i, 0]]
-            new_values[row, col] = self.values[i, 2]
+            row = row_mapping[self.values[i][1]]
+            col = col_mapping[self.values[i][0]]
+            new_values[row, col] = self.values[i][2]
             if progress_callback:
                 progress_callback()
+
         return (
             PivotCrosstab(
                 new_row_ids,
@@ -1123,8 +1123,8 @@ class WeightedFlatCrosstab(Crosstab):
                 dict([(col_id, 'continuous') for col_id in new_col_ids]),
                 None,
                 self.missing,
-                row_mapping,
-                col_mapping,
+                row_mapping=row_mapping,
+                col_mapping=col_mapping,
             )
         )
 
@@ -1140,7 +1140,7 @@ class IntWeightedFlatCrosstab(WeightedFlatCrosstab):
             progress_callback=progress_callback
         )
         pivot.__class__ = IntPivotCrosstab
-        pivot.values = pivot.values.astype(np.int32)
+        pivot.values = pivot.values.astype(np.int)
         return pivot
 
     def to_flat(self, progress_callback=None):
@@ -1150,13 +1150,13 @@ class IntWeightedFlatCrosstab(WeightedFlatCrosstab):
         del new_col_type['__weight__']
         new_col_mapping = dict(self.col_mapping)
         del new_col_mapping['__weight__']
-        row_counter = 1
-        new_values = np.empty((self.values[:, 3].sum(0), 3), dtype=np.dtype("string"))
-        new_row_ids = list(range(1, len(new_values)))
+        row_counter = 0
+        new_values = np.empty((sum(x[2] for x in self.values), 2), dtype=np.dtype("object"))
+        new_row_ids = list(range(1, len(new_values) + 1))
         for row_id in range(len(self.row_ids)):
-            for i in range(self.values[row_id, 3]):
-                new_values[row_counter, 0] = self.values[row_id, 0]
-                new_values[row_counter, 1] = self.values[row_id, 1]
+            for i in range(self.values[row_id][2]):
+                new_values[row_counter, 0] = self.values[row_id][0]
+                new_values[row_counter, 1] = self.values[row_id][1]
                 row_counter += 1
                 if progress_callback:
                     progress_callback()
