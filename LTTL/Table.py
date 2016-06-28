@@ -162,6 +162,17 @@ class Table(object):
         except:
             return missing
 
+    def to_dict(self):
+        """
+        innefficient, just for comparing output for testing
+        """
+        out = dict()
+        rev_cols = dict(map(reversed, self.col_mapping.items()))
+        rev_rows = dict(map(reversed, self.row_mapping.items()))
+        for k, v in iteritems(self.values):
+            out[(rev_rows[k[0]], rev_cols[k[1]])] = v
+        return out
+
     # TODO: test.
     def to_string(
         self,
@@ -676,7 +687,7 @@ class PivotCrosstab(Crosstab):
         col_mapping = dict(map(reversed, enumerate(col_ids)))
 
         if cls == IntPivotCrosstab:
-            if not issubclass(np_array.dtype.type, np.integer):
+            if not issubclass(np_array.dtype.type, np.int32):
                 raise ValueError(
                     'Cannot cast non-integer numpy array to IntPivotCrosstab.'
                 )
