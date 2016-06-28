@@ -609,7 +609,6 @@ class PivotCrosstab(Crosstab):
             class_col_id=None,
             missing=self.missing,
             _cached_row_id=new_cached_row_id,
-            row_mapping=dict(map(reversed, enumerate(new_row_ids))),
             col_mapping=dict(map(reversed, enumerate(new_col_ids))),
         )
 
@@ -871,31 +870,21 @@ class IntPivotCrosstab(PivotCrosstab):
         new_header_col_id = '__id__'
         new_header_col_type = 'string'
         new_col_ids = [self.header_row_id or '__column__']
-        num_row_ids = len(self.row_ids)
-        if num_row_ids > 1:
-            new_col_ids.append(self.header_col_id or '__row__')
-            new_cached_row_id = None
-            second_col_id = new_col_ids[1]
-        else:
-            new_cached_row_id = self.row_ids[0]
+        new_col_ids.append(self.header_col_id or '__row__')
+        new_cached_row_id = None
         new_col_type = dict([(col_id, 'discrete') for col_id in new_col_ids])
-        row_counter = 1
-        new_values = dict()
-        new_row_ids = list()
-        get_count = self.values.get
-        first_col_id = new_col_ids[0]
+        new_values = list()
+
         for row_id in self.row_ids:
             for col_id in self.col_ids:
-                count = get_count(row_id, col_id, 0)
-                for i in range(count):
-                    new_row_id = text(row_counter)
-                    new_row_ids.append(new_row_id)
-                    new_values[(new_row_id, first_col_id)] = col_id
-                    if num_row_ids > 1:
-                        new_values[(new_row_id, second_col_id)] = row_id
-                    row_counter += 1
+                count = self.values.get(row_id, col_id, 0)
+                new_values.extend([[row_id, col_id]] * count)
             if progress_callback:
                 progress_callback()
+
+        new_row_ids = list(range(1, len(new_values) + 1))
+        new_values = np.array(new_values)
+
         return (
             FlatCrosstab(
                 new_row_ids,
@@ -907,6 +896,7 @@ class IntPivotCrosstab(PivotCrosstab):
                 class_col_id=None,
                 missing=self.missing,
                 _cached_row_id=new_cached_row_id,
+                col_mapping={new_col_ids[0]: 0, new_col_ids[1]: 1}
             )
         )
 
@@ -923,6 +913,13 @@ class IntPivotCrosstab(PivotCrosstab):
 
 class FlatCrosstab(Crosstab):
     """A class for storing crosstabs in 'flat' format in LTTL.
+    They are stored as numpy arrays with column type "string"
+    (and int for the weighted version). There is no row_mapping,
+    because the row_ids is a counter, that can be used as a direct reference.
+
+    Given the currently implemented methods and constructors, identical rows
+    are always consecutive. This property is used to speed up the wheigthed
+    conversion.
 
     Example:
     +----------+-------+
@@ -965,7 +962,7 @@ class FlatCrosstab(Crosstab):
 
         """
         try:
-            return self.values[self.row_mapping[row], self.col_mapping[col]]
+            return self.values[row, self.col_mapping[col]]
         except:
             return self.missing if missing is None else missing
 
@@ -973,48 +970,20 @@ class FlatCrosstab(Crosstab):
         """Return a copy of the crosstab in 'pivot' format"""
         new_header_row_id = self.col_ids[0]
         new_header_row_type = 'discrete'
-        new_header_col_id = '__row__'
+        new_header_col_id = self.col_ids[1]
         new_header_col_type = 'discrete'
-        new_col_ids = Crosstab.get_unique_items(
-            [
-                self.get(row_id, new_header_row_id)
-                for row_id in self.row_ids
-            ]
-        )
-        new_row_ids = list()
-        new_values = dict()
-        if len(self.col_ids) > 1:
-            new_header_col_id = self.col_ids[1]
-            new_row_ids.extend(
-                Crosstab.get_unique_items(
-                    [
-                        self.get(row_id, new_header_col_id)
-                        for row_id in self.row_ids
-                    ]
-                )
-            )
-            for row_id in self.row_ids:
-                pair = (
-                    self.get(row_id, new_header_col_id),
-                    self.get(row_id, new_header_row_id),
-                )
-                new_values[pair] = new_values.get(pair, 0) + 1
-                if progress_callback:
-                    progress_callback()
-        else:
-            if self._cached_row_id is not None:
-                cached_row_id = self._cached_row_id
-            else:
-                cached_row_id = '__data__'
-            new_row_ids.append(cached_row_id)
-            for row_id in self.row_ids:
-                pair = (
-                    cached_row_id,
-                    self.get(row_id, new_header_row_id),
-                )
-                new_values[pair] = new_values.get(pair, 0) + 1
-                if progress_callback:
-                    progress_callback()
+        new_col_ids = np.unique(self.values[:, 0]).tolist()
+        new_row_ids = np.unique(self.values[:, 1]).tolist()
+        row_mapping = dict(map(reversed, enumerate(new_row_ids)))
+        col_mapping = dict(map(reversed, enumerate(new_col_ids)))
+        new_values = dok_matrix((len(new_row_ids), len(new_col_ids)), dtype=np.int32)
+
+        for i in range(self.values.shape[0]):
+            row = row_mapping[self.values[i, 1]]
+            col = col_mapping[self.values[i, 0]]
+            new_values[row, col] = new_values[row, col] + 1
+            if progress_callback:
+                progress_callback()
         return (
             IntPivotCrosstab(
                 new_row_ids,
@@ -1028,6 +997,8 @@ class FlatCrosstab(Crosstab):
                 None,
                 self.missing,
                 self._cached_row_id,
+                row_mapping,
+                col_mapping,
             )
         )
 
@@ -1035,47 +1006,26 @@ class FlatCrosstab(Crosstab):
         """Return a copy of the crosstab in 'weighted and flat' format"""
         new_col_ids = list(self.col_ids)
         new_col_type = dict(self.col_type)
-        row_counter = 1
-        new_values = dict()
+        new_values = list()
         new_row_ids = list()
-        if len(self.col_ids) > 1:
-            first_col_id = self.col_ids[0]
-            second_col_id = self.col_ids[1]
-            row_id_for_pair = dict()
-            for row_id in self.row_ids:
-                first_col_value = self.values[row_id, first_col_id]
-                second_col_value = self.values[row_id, second_col_id]
-                pair = (first_col_value, second_col_value)
-                if pair in row_id_for_pair.keys():
-                    known_pair_row_id = row_id_for_pair[pair]
-                    new_values[(known_pair_row_id, '__weight__')] += 1
-                else:
-                    new_row_id = text(row_counter)
-                    new_row_ids.append(new_row_id)
-                    row_id_for_pair[pair] = new_row_id
-                    new_values[(new_row_id, first_col_id)] = first_col_value
-                    new_values[(new_row_id, second_col_id)] = second_col_value
-                    new_values[(new_row_id, '__weight__')] = 1
-                    row_counter += 1
-                if progress_callback:
-                    progress_callback()
-        else:
-            col_id = self.col_ids[0]
-            row_id_for_value = dict()
-            for row_id in self.row_ids:
-                col_value = self.values[row_id, col_id]
-                if col_value in row_id_for_value.keys():
-                    known_value_row_id = row_id_for_value[col_value]
-                    new_values[(known_value_row_id, '__weight__')] += 1
-                else:
-                    new_row_id = text(row_counter)
-                    new_row_ids.append(new_row_id)
-                    row_id_for_value[col_value] = new_row_id
-                    new_values[(new_row_id, col_id)] = col_value
-                    new_values[(new_row_id, '__weight__')] = 1
-                    row_counter += 1
-                if progress_callback:
-                    progress_callback()
+        previous_row = None
+        previous_count = 0
+        for row_id in self.row_ids:
+
+            if previous_row == self.values[row_id, :]:
+                previous_count += 1
+            else:
+                if previous_count > 0:
+                    new_values.append([self.values[row_id, 0],
+                                       self.values[row_id, 1],
+                                       previous_count]
+                                      )
+                previous_row = self.values[row_id, :]
+                previous_count = 1
+            if progress_callback:
+                progress_callback()
+        new_row_ids = list(range(1, len(new_values)))
+        new_values = np.array(new_values)
         new_col_ids.append('__weight__')
         new_col_type['__weight__'] = 'continuous'
         return (
@@ -1091,6 +1041,7 @@ class FlatCrosstab(Crosstab):
                 None,
                 self.missing,
                 self._cached_row_id,
+                col_mapping=dict(map(reversed, enumerate(new_col_ids)))
             )
         )
 
@@ -1127,7 +1078,7 @@ class WeightedFlatCrosstab(Crosstab):
 
         """
         try:
-            return self.values[self.row_mapping[row], self.col_mapping[col]]
+            return self.values[row, self.col_mapping[col]]
         except:
             return self.missing if missing is None else missing
 
@@ -1135,46 +1086,20 @@ class WeightedFlatCrosstab(Crosstab):
         """Return a copy of the crosstab in 'pivot' format"""
         new_header_row_id = self.col_ids[0]
         new_header_row_type = 'discrete'
-        new_header_col_id = '__row__'
+        new_header_col_id = self.col_ids[1]
         new_header_col_type = 'discrete'
-        new_col_ids = Crosstab.get_unique_items(
-            [
-                self.get(row_id, new_header_row_id)
-                for row_id in self.row_ids
-            ]
-        )
-        new_row_ids = list()
-        new_values = dict()
-        if len(self.col_ids) > 2:
-            new_header_col_id = self.col_ids[1]
-            new_row_ids.extend(Crosstab.get_unique_items(
-                [
-                    self.get(row_id, new_header_col_id)
-                    for row_id in self.row_ids
-                ]
-            ))
-            for row_id in self.row_ids:
-                pair = (
-                    self.get(row_id, new_header_col_id),
-                    self.get(row_id, new_header_row_id),
-                )
-                new_values[pair] = self.get(row_id, '__weight__')
-                if progress_callback:
-                    progress_callback()
-        else:
-            if self._cached_row_id is not None:
-                cached_row_id = self._cached_row_id
-            else:
-                cached_row_id = '__data__'
-            new_row_ids.append(cached_row_id)
-            for row_id in self.row_ids:
-                pair = (
-                    cached_row_id,
-                    self.get(row_id, new_header_row_id),
-                )
-                new_values[pair] = self.get(row_id, '__weight__')
-                if progress_callback:
-                    progress_callback()
+        new_col_ids = np.unique(self.values[:, 0]).tolist()
+        new_row_ids = np.unique(self.values[:, 1]).tolist()
+        row_mapping = dict(map(reversed, enumerate(new_row_ids)))
+        col_mapping = dict(map(reversed, enumerate(new_col_ids)))
+        new_values = dok_matrix((len(new_row_ids), len(new_col_ids)), dtype=np.float32)
+
+        for i in range(self.values.shape[0]):
+            row = row_mapping[self.values[i, 1]]
+            col = col_mapping[self.values[i, 0]]
+            new_values[row, col] = self.values[i, 2]
+            if progress_callback:
+                progress_callback()
         return (
             PivotCrosstab(
                 new_row_ids,
@@ -1187,6 +1112,8 @@ class WeightedFlatCrosstab(Crosstab):
                 dict([(col_id, 'continuous') for col_id in new_col_ids]),
                 None,
                 self.missing,
+                row_mapping,
+                col_mapping,
             )
         )
 
@@ -1202,6 +1129,7 @@ class IntWeightedFlatCrosstab(WeightedFlatCrosstab):
             progress_callback=progress_callback
         )
         pivot.__class__ = IntPivotCrosstab
+        pivot.values = pivot.values.astype(np.int32)
         return pivot
 
     def to_flat(self, progress_callback=None):
@@ -1209,34 +1137,16 @@ class IntWeightedFlatCrosstab(WeightedFlatCrosstab):
         new_col_ids = list([c for c in self.col_ids if c != '__weight__'])
         new_col_type = dict(self.col_type)
         del new_col_type['__weight__']
+        new_col_mapping = dict(self.col_mapping)
+        del new_col_mapping['__weight__']
         row_counter = 1
-        new_values = dict()
-        new_row_ids = list()
-        if len(self.col_ids) > 1:
-            first_col_id = self.col_ids[0]
-            second_col_id = self.col_ids[1]
-            for row_id in self.row_ids:
-                count = self.get(row_id, '__weight__')
-                first_col_value = self.get(row_id, first_col_id)
-                second_col_value = self.get(row_id, second_col_id)
-                for i in range(count):
-                    new_row_id = text(row_counter)
-                    new_row_ids.append(new_row_id)
-                    new_values[(new_row_id, first_col_id)] = first_col_value
-                    new_values[(new_row_id, second_col_id)] = second_col_value
-                    row_counter += 1
-                if progress_callback:
-                    progress_callback()
-        else:
-            col_id = self.col_ids[0]
-            for row_id in self.row_ids:
-                count = self.get(row_id, '__weight__')
-                col_value = self.get(row_id, col_id)
-                for i in range(count):
-                    new_row_id = text(row_counter)
-                    new_row_ids.append(new_row_id)
-                    new_values[(new_row_id, col_id)] = col_value
-                    row_counter += 1
+        new_values = np.empty((self.values[:, 3].sum(0), 3), dtype=np.dtype("string"))
+        new_row_ids = list(range(1, len(new_values)))
+        for row_id in range(len(self.row_ids)):
+            for i in range(self.values[row_id, 3]):
+                new_values[row_counter, 0] = self.values[row_id, 0]
+                new_values[row_counter, 1] = self.values[row_id, 1]
+                row_counter += 1
                 if progress_callback:
                     progress_callback()
         return (
@@ -1252,5 +1162,7 @@ class IntWeightedFlatCrosstab(WeightedFlatCrosstab):
                 None,
                 self.missing,
                 self._cached_row_id,
+                col_mapping=new_col_mapping,
+
             )
         )
