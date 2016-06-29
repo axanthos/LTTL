@@ -156,14 +156,15 @@ class Table(object):
         except:
             return missing
 
-    def to_dict(self):
+    def to_dict(self, include_missing=True):
         """
         inefficient, just for comparing output for testing (for test_cooc.py)
         """
         out = dict()
         for col in self.col_ids:
             for row in self.row_ids:
-                out[(row, col)] = self.get(row, col, 0)
+                if include_missing or (self.row_mapping[row], self.col_mapping[col]) in self.values:
+                    out[(row, col)] = self.get(row, col, 0)
         return out
 
     # TODO: test.
