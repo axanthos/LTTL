@@ -78,4 +78,5 @@ setup(
 
     test_suite='nose.collector',
     tests_require='nose',
+    download_url = 'https://github.com/axanthos/LTTL/tarball/v2.0a0',
 )
