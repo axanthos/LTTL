@@ -20,4 +20,4 @@ table = Processor.count_in_context(
     contexts={'segmentation': word_seg},
 )
 
-table.to_normalized(mode='cols', type='l1')
+table.to_normalized(mode='columns', type='l1')
