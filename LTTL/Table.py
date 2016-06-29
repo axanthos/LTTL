@@ -158,13 +158,12 @@ class Table(object):
 
     def to_dict(self):
         """
-        inefficient, just for comparing output for testing
+        inefficient, just for comparing output for testing (for test_cooc.py)
         """
         out = dict()
-        rev_cols = dict(map(reversed, self.col_mapping.items()))
-        rev_rows = dict(map(reversed, self.row_mapping.items()))
-        for k, v in iteritems(self.values):
-            out[(rev_rows[k[0]], rev_cols[k[1]])] = v
+        for col in self.col_ids:
+            for row in self.row_ids:
+                out[(row, col)] = self.get(row, col, 0)
         return out
 
     # TODO: test.
