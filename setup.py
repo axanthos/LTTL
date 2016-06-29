@@ -68,7 +68,7 @@ setup(
 
     keywords=('text mining', 'text analysis', 'text processing'),
 
-    packages=find_packages(exclude=['docs', 'tests']),
+    packages=find_packages(exclude=['docs', 'tests', 'bugs']),
 
     install_requires=[
         'setuptools',

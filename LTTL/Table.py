@@ -880,7 +880,7 @@ class IntPivotCrosstab(PivotCrosstab):
         # orange_table = self.to_orange_table('utf8')
         # freq_table = Orange.data.preprocess.RemoveDiscrete(orange_table)
         # freq = freq_table.to_numpy()[0]
-        freq = self.to_numpy()[0]   # TODO: check (was previous 2 lines)
+        freq = self.to_numpy()
         if self.header_col_type == 'continuous':
             freq = freq[::, 1::]
         total_freq = freq.sum()
