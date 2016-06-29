@@ -39,6 +39,7 @@ import unicodedata
 from .Segmentation import Segmentation
 from .Segment import Segment
 from .Input import Input
+from .Utils import iround
 
 from builtins import range
 from builtins import str as text
@@ -704,7 +705,7 @@ def sample(
         ))
     elif mode == 'systematic':
         step = 1 / (sample_size / len(segmentation))
-        step = int(round(step) - .5) + (step > 0)  # TODO revert to using iround
+        step = iround(step)
         sampled_indices = list(range(len(segmentation)))[::step]
     # Other modes raise a ValueError exception.
     else:

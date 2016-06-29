@@ -229,7 +229,10 @@ class Segmentation(object):
                 self.label = label
 
     def __del__(self):
-        cleanup_segmentation(self)
+        try:
+            cleanup_segmentation(self)
+        except:
+            pass
 
     def __len__(self):
         """Return the number of segments in the segmentation"""
@@ -470,7 +473,6 @@ class Segmentation(object):
 
         return sorted_segmentation
 
-    # TODO: update client code to match signature change (format=>formatting)
     def to_string(
         self,
         formatting=None,
