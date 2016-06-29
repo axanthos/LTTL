@@ -1663,7 +1663,9 @@ def annotate_contexts(
             new_values[(row_id, '__annotation__')] = annotations[0]
         else:
             new_values[(row_id, '__annotation__')] = (
-                multiple_values['value_delimiter'].join(annotations)
+                multiple_values['value_delimiter'].join(
+                    unicode(a) for a in annotations
+                )
             )
 
     # Create table...
