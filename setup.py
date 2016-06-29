@@ -73,7 +73,9 @@ setup(
     install_requires=[
         'setuptools',
         'numpy',
+        'scipy',
         'future',
+        'six',
     ],
 
     test_suite='nose.collector',
