@@ -11,4 +11,4 @@ modified version of the original text data, or data tables summarizing
 properties of these data (e.g. unit frequency, complexity measures, 
 concordances, and so on).
 
-LTTL was designed and implemented by `LangTech Sàrl <http://langtech.ch>`_.
+LTTL was designed and implemented by `LangTech Sarl <http://langtech.ch>`_.

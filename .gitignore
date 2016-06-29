@@ -90,3 +90,4 @@ ENV/
 
 # Pycharms project settings
 .idea
+.pypirc
