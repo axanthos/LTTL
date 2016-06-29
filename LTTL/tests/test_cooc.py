@@ -38,6 +38,7 @@ __maintainer__ = "LangTech Sarl"
 
 class TestCooc(unittest.TestCase):
     def setUp(self):
+        self.maxDiff = None
         input_seg = Input("un texte")
         word_seg = Segmenter.tokenize(
             input_seg,
@@ -439,42 +440,42 @@ class TestCooc(unittest.TestCase):
     # 1. Co-occurrence in window without annotation:
     def test_cooc_window_woa_values(self):
         self.assertEqual(
-            self.output_cooc_in_window_woa.values,
+            self.output_cooc_in_window_woa.to_dict(),
             self.window_woa_values,
         )
 
     # 2. Co-occurrence in window with annotation:
     def test_cooc_window_wa_values(self):
         self.assertEqual(
-            self.output_cooc_in_window_wa.values,
+            self.output_cooc_in_window_wa.to_dict(),
             self.window_wa_values,
         )
 
     # 3. Co-occurrence in context without secondary unit and without annotation:
     def test_cooc_context_wos_woa_values(self):
         self.assertEqual(
-            self.output_cooc_in_context_wos_woa.values,
+            self.output_cooc_in_context_wos_woa.to_dict(),
             self.context_wos_woa_values,
         )
 
     # 4. Co_occurrence in context wihout a secondary unit and with annotation:
     def test_cooc_context_wos_wa_values(self):
         self.assertEqual(
-            self.output_cooc_in_context_wos_wa.values,
+            self.output_cooc_in_context_wos_wa.to_dict(),
             self.context_wos_wa_values,
         )
 
     # 5. Co_occurrence in context wih a secondary unit and without annotation:
     def test_cooc_context_ws_woa_values(self):
         self.assertEqual(
-            self.output_cooc_in_context_ws_woa.values,
+            self.output_cooc_in_context_ws_woa.to_dict(),
             self.context_ws_woa_values,
         )
 
     # 6. Co_occurrence in context wih a secondary unit and with annotation:
     def test_cooc_context_ws_wa_values(self):
         self.assertEqual(
-            self.output_cooc_in_context_ws_wa.values,
+            self.output_cooc_in_context_ws_wa.to_dict(),
             self.context_ws_wa_values,
         )
 
