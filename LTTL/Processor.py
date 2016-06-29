@@ -2150,7 +2150,7 @@ def cooc_in_window(
         return IntPivotCrosstab.from_numpy(
             contingency.col_ids[:],
             contingency.col_ids[:],
-            cooc.astype(np.int32),
+            cooc,
             contingency.header_row_id,
             contingency.header_row_type,
             contingency.header_row_id,
@@ -2183,10 +2183,10 @@ def cooc_in_context(
         row_labels = contingency.row_ids
         row_labels2 = contingency2.row_ids
         keep_from_contingency = [
-            i for i in range(len(row_labels)) if row_labels[i] in row_labels2
+            i for i in xrange(len(row_labels)) if row_labels[i] in row_labels2
         ]
         keep_from_contingency2 =[
-            i for i in range(len(row_labels2)) if row_labels2[i] in row_labels
+            i for i in xrange(len(row_labels2)) if row_labels2[i] in row_labels
         ]
         try:
             np_contingency = np_contingency[keep_from_contingency].astype(int)
@@ -2195,7 +2195,7 @@ def cooc_in_context(
             return IntPivotCrosstab.from_numpy(
                 contingency2.col_ids[:],
                 contingency.col_ids[:],
-                cooc.astype(np.int32),
+                cooc,
                 contingency.header_col_id,
                 contingency.header_col_type,
                 contingency2.header_col_id,
@@ -2210,7 +2210,7 @@ def cooc_in_context(
             return IntPivotCrosstab.from_numpy(
                 contingency.col_ids[:],
                 contingency.col_ids[:],
-                cooc.astype(np.int32),
+                cooc,
                 contingency.header_col_id,
                 contingency.header_col_type,
                 contingency.header_col_id,
