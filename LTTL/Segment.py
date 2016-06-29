@@ -327,7 +327,7 @@ class Segment(object):
                     start_search = (end_search + start_search) // 2
 
             # In case we need the very first segment...
-            if segmentation[start_search].start >= start:
+            if segmentation[start_search].start == start:
                 start_search -= 1
 
             # Start iterating at this point (start_search always ends up
@@ -372,17 +372,13 @@ class Segment(object):
             # Binary search for start of relevant segments...
             while end_search - start_search > 1:
                 middle = segmentation[(end_search + start_search) // 2]
-                if (middle.start or 0) >= start:
+                if (middle.start or 0) > start:
                     end_search = (end_search + start_search) // 2
                 else:
                     start_search = (end_search + start_search) // 2
 
-            # In case we need the very first segment...
-            if segmentation[start_search].start >= start:
-                start_search -= 1
-
             # start iterating at this point...
-            for i, segment in enumerate(segmentation[start_search + 1:]):
+            for i, segment in enumerate(segmentation[start_search:]):
                 # and stop when we reach the end
                 if (
                     str_index != segment.str_index or
@@ -390,7 +386,7 @@ class Segment(object):
                 ):
                     break
                 if end >= (segment.end or string_length):
-                    ret.append(i + (start_search + 1))
+                    ret.append(i + start_search)
             return ret
         except:
             return list()
