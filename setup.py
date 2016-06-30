@@ -26,7 +26,7 @@ from setuptools import setup, find_packages
 from codecs import open
 from os import path
 
-__version__ = "1.0.1"
+__version__ = "1.0.2"
 
 here = path.abspath(path.dirname(__file__))
 
@@ -52,7 +52,7 @@ setup(
     license='GNU GPL v3',
 
     classifiers=[
-        'Development Status :: 4 - Beta',
+        'Development Status :: 3 - Alpha',
         'Programming Language :: Python :: 2',
         'Programming Language :: Python :: 2.7',
         'Programming Language :: Python :: 3',
