@@ -86,7 +86,6 @@ class Segment(object):
     def to_string(
         self,
         formatting=None,
-        segment_delimiter='\n',
         humanize_addresses=False,
         segment_count=0,
         default_dict=None,
@@ -95,9 +94,6 @@ class Segment(object):
         """Stringify a segmentation
 
         :param formatting: format string for each segment (default None)
-
-        :param segment_delimiter: string inserted between consecutive segments
-        (default '\n')
 
         :param humanize_addresses: boolean indicating whether string indices as
         well as start positions in strings should be numbered from 1, rather
@@ -139,26 +135,22 @@ class Segment(object):
             # Apply format and add resulting line to list for later output.
             return formatting % segment_dict
 
-            # Else if no format has been specified...
+        # Else if no format has been specified...
         else:
             # Add lines in predefined format to list for later output...
 
-            a = 'segment number %i%s\tcontent:\t"%s"%s\tstr_index:\t%i%s\tstart:\t%i%s\tend:\t%i' %     \
+            a = 'segment number %i\n\tcontent:\t"%s"\n\tstr_index:\t%i\n\tstart:\t%i\n\tend:\t%i' %     \
                 (
                     segment_count,
-                    segment_delimiter,
                     self.get_content(),
-                    segment_delimiter,
                     str_index,
-                    segment_delimiter,
                     start,
-                    segment_delimiter,
                     end,
                 )
 
             # Add annotations (if any) in predefined format...
             if len(self.annotations):
-                a += '\n\tannotations:%s' % segment_delimiter
+                a += '\n\tannotations:\n'
                 a += '\n'.join(
                     [
                         '\t\t%-20s %s' % (k, v)

@@ -102,6 +102,18 @@ class TestSegmentation(unittest.TestCase):
             msg="to_string() doesn't format segmentation correctly by default!"
         )
 
+    def test_to_string_delimiter(self):
+        """Does to_string() format segment delimiter correctly?"""
+        output_string = self.word_seg.to_string(
+            segment_delimiter='DELIMITER',
+        )
+        print output_string
+        self.assertIn(
+            'DELIMITER',
+            output_string,
+            msg="to_string() doesn't format segment delimiter correctly!"
+        )
+
     def test_to_string_header(self):
         """Does to_string() format header correctly?"""
         output_string = self.word_seg.to_string(

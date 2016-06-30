@@ -490,8 +490,7 @@ class Segmentation(object):
         :param segment_delimiter: string inserted between consecutive segments
         (default '\n')
 
-        :param header: string inserted at of output string (default
-        '')
+        :param header: string inserted at start of output string (default '')
 
         :param footer: string inserted at end of output string (default '')
 
@@ -528,11 +527,10 @@ class Segmentation(object):
                 for match in re.finditer(r'(?<=%\()(.+?)(?=\))', formatting):
                     default_dict[match.group(0)] = '__none__'
 
-            string += '\n'.join(
+            string += segment_delimiter.join(
                 [
                     segment.to_string(
                         formatting,
-                        segment_delimiter,
                         humanize_addresses,
                         index+1,
                         default_dict,
@@ -560,7 +558,6 @@ class Segmentation(object):
                 [
                     self[index].to_string(
                         formatting,
-                        segment_delimiter,
                         humanize_addresses,
                         index+1,
                         default_dict,
@@ -577,7 +574,6 @@ class Segmentation(object):
                 [
                     self[index].to_string(
                         formatting,
-                        segment_delimiter,
                         humanize_addresses,
                         index+1,
                         default_dict,
