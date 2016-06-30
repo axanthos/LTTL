@@ -45,13 +45,9 @@ from builtins import range
 from builtins import str as text
 from builtins import dict
 
-__version__ = "1.0.0"
+__version__ = "1.0.1"
 
 
-# TODO: Update client code to match functions in place of methods.
-# TODO: Update client code to match auto_number in place of auto_numbering.
-
-# TODO: verify impact of changing signature.
 def concatenate(
     segmentations,
     label='my_concatenation',
@@ -191,7 +187,6 @@ def concatenate(
 
 # TODO: verify impact of changing default value of merge_duplicate to False
 # TODO: verify impact of sorting new segments outside of regex loop
-# TODO: update client code to reflect de-capitalization of mode parameters.
 def tokenize(
     segmentation,
     regexes,
@@ -739,7 +734,6 @@ def sample(
 
 
 # TODO: verify number of iterations in callers (cf. auto-numbering)
-# TODO: modify client code to account for signature change.
 def intersect(
     source,
     filtering,
@@ -839,9 +833,6 @@ def intersect(
     return new_segmentation, neg_segmentation
 
 
-# TODO: verify impact of changing default value of remove_markup to False
-# TODO: verify impact of changing signature
-# TODO: verify impact of merge_duplicates (or not) on client progress track
 def import_xml(
     segmentation,
     element,
@@ -1069,9 +1060,6 @@ def import_xml(
     return new_segmentation
 
 
-# TODO: Update client code to match displacement from Recoder to Segmenter.
-# TODO: Update client code to match functions in place of methods.
-# TODO: Update client code to match change in progress tracking.
 def recode(
     segmentation,
     substitutions=None,
@@ -1166,8 +1154,10 @@ def recode(
         if recoded_text != original_text:
             new_input = Input()
             new_input.update(recoded_text, label)
+            modified_segment = new_input[0]
             if copy_annotations:
-                new_input[0].annotations.update(segment.annotations.copy())
+                modified_segment.annotations.update(segment.annotations.copy())
+                new_input[0] = modified_segment
             last_recoded = True
             new_objects.append(new_input)
 
@@ -1210,7 +1200,6 @@ def recode(
     return new_segmentation
 
 
-# TODO: verify impact on client code of removing neg_segmentation from output
 def bypass(segmentation, label='bypassed_data'):
     """Return a verbatim copy of a segmentation
 

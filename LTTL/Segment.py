@@ -30,7 +30,7 @@ from .Segmentation import Segmentation
 
 from builtins import range
 
-__version__ = "1.0.0"
+__version__ = "1.0.1"
 
 
 class Segment(object):
@@ -51,7 +51,7 @@ class Segment(object):
             else:
                 self.end = str_index[2]
             if start is None:
-                self.annotations = {}
+                self.annotations= dict()
             else:
                 self.annotations = start
         else:
@@ -59,7 +59,7 @@ class Segment(object):
             self.start = start
             self.end = end
             if annotations is None:
-                self.annotations = {}
+                self.annotations= dict()
             else:
                 self.annotations = annotations
 

@@ -27,7 +27,7 @@ from LTTL.Segment import Segment
 from LTTL.Segmentation import Segmentation
 from LTTL.Input import Input
 
-__version__ = "1.0.0"
+__version__ = "1.0.1"
 
 
 class TestSegment(unittest.TestCase):

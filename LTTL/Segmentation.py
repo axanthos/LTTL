@@ -30,7 +30,7 @@ import os
 from tempfile import NamedTemporaryFile
 from collections import deque
 
-__version__ = "1.0.0"
+__version__ = "1.0.1"
 
 # segmentation with more segments will have
 # their string representation summarized

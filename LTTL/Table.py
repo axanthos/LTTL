@@ -42,22 +42,21 @@ from builtins import str as text
 from future.utils import iteritems
 from past.builtins import xrange
 
-__version__ = "1.0.0"
+__version__ = "1.0.1"
 
 
 class Table(object):
     """Base class for tables in LTTL."""
 
-    # TODO: modify client code (signature change: header_row/col).
     def __init__(
         self,
         row_ids,
         col_ids,
         values,
-        header_row_id='__col__',    # formerly header_row['id']
-        header_row_type='string',   # formerly header_row['type']
-        header_col_id='__row__',    # formerly header_col['id']
-        header_col_type='string',   # formerly header_col['type']
+        header_row_id='__col__',
+        header_row_type='string',
+        header_col_id='__row__',
+        header_col_type='string',
         col_type=None,
         class_col_id=None,
         missing=None,
@@ -294,14 +293,13 @@ class Table(object):
 
             return orange_table
 
-    # TODO: modify client code to match signature change (key_id etc).
     # TODO: test.
     def to_sorted(
         self,
-        key_col_id=None,      # formerly row['key_id']
-        reverse_rows=False,   # formerly row['reverse']
-        key_row_id=None,      # formerly col['key_id']
-        reverse_cols=False,   # formerly col['reverse']
+        key_col_id=None,
+        reverse_rows=False,
+        key_row_id=None,
+        reverse_cols=False,
     ):
         """Return a sorted copy of the table
 

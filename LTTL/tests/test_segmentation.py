@@ -21,7 +21,7 @@ along with LTTL v2.0. If not, see <http://www.gnu.org/licenses/>.
 from __future__ import absolute_import
 from __future__ import unicode_literals
 
-__version__ = "1.0.0"
+__version__ = "1.0.1"
 
 import unittest
 
@@ -107,7 +107,6 @@ class TestSegmentation(unittest.TestCase):
         output_string = self.word_seg.to_string(
             segment_delimiter='DELIMITER',
         )
-        print output_string
         self.assertIn(
             'DELIMITER',
             output_string,
