@@ -319,7 +319,7 @@ class Segment(object):
                     start_search = (end_search + start_search) // 2
 
             # In case we need the very first segment...
-            if segmentation[start_search].start >= start:
+            if (segmentation[start_search].start or 0) >= start:
                 start_search -= 1
 
             # Start iterating at this point (start_search always ends up
@@ -370,7 +370,7 @@ class Segment(object):
                     start_search = (end_search + start_search) // 2
 
             # In case we need the very first segment...
-            if segmentation[start_search].start >= start:
+            if (segmentation[start_search].start or 0) >= start:
                 start_search -= 1
 
             # start iterating at this point...
