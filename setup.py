@@ -26,7 +26,7 @@ from setuptools import setup, find_packages
 from codecs import open
 from os import path
 
-__version__ = "1.0.2"
+__version__ = "1.0.3"
 
 here = path.abspath(path.dirname(__file__))
 
@@ -36,7 +36,7 @@ with open(path.join(here, 'README.rst'), encoding='utf-8') as f:
 setup(
     name='LTTL',
 
-    version='2.0a1',
+    version='2.0a2',
 
     description='LangTech Text Library (LTTL) for text processing and analysis',
     long_description=long_description,

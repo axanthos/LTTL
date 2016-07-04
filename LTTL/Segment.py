@@ -30,7 +30,7 @@ from .Segmentation import Segmentation
 
 from builtins import range
 
-__version__ = "1.0.1"
+__version__ = "1.0.2"
 
 
 class Segment(object):
