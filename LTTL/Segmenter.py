@@ -45,7 +45,7 @@ from builtins import range
 from builtins import str as text
 from builtins import dict
 
-__version__ = "1.0.1"
+__version__ = "1.0.2"
 
 
 def concatenate(
@@ -909,7 +909,7 @@ def import_xml(
     # Initializations...
     if conditions is None:
         conditions = dict()
-    tag_regex = re.compile(r'</?[^/]+?/?>')
+    tag_regex = re.compile(r'</?[^>]+?/?>')
     stack = list()
     attr_stack = list()
     new_segmentation = Segmentation(list(), label)

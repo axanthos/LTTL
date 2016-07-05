@@ -26,17 +26,20 @@ from setuptools import setup, find_packages
 from codecs import open
 from os import path
 
-__version__ = "1.0.3"
+__version__ = "1.0.4"
 
 here = path.abspath(path.dirname(__file__))
 
 with open(path.join(here, 'README.rst'), encoding='utf-8') as f:
     long_description = f.read()
 
+package_version = '2.0a3'
+url = 'https://github.com/axanthos/LTTL/tarball/v' + package_version
+
 setup(
     name='LTTL',
 
-    version='2.0a2',
+    version=package_version,
 
     description='LangTech Text Library (LTTL) for text processing and analysis',
     long_description=long_description,
@@ -78,5 +81,5 @@ setup(
 
     test_suite='nose.collector',
     tests_require='nose',
-    download_url = 'https://github.com/axanthos/LTTL/tarball/v2.0a2',
+    download_url=url,
 )
