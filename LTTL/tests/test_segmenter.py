@@ -205,7 +205,7 @@ class TestSegmenter(unittest.TestCase):
             ]
         )
 
-        self.xml_seg = Input('<a attr="1"><a attr="2/">c<a/>d</a></a>')
+        self.xml_seg = Input('<a attr="1"><a attr="2/3/">c<a/>d</a></a>')
         self.wrong_xml_seg = Input('<a><a>test</a>')
         self.wrong_xml_seg2 = Input('<a>test</a></a>')
 
@@ -1040,7 +1040,7 @@ class TestSegmenter(unittest.TestCase):
         )
         self.assertEqual(
             [s.get_content() for s in segmentation],
-            ['<a attr="2/">c<a/>d</a>', 'c<a/>d'],
+            ['<a attr="2/3/">c<a/>d</a>', 'c<a/>d'],
             msg="import_xml doesn't segment xml elements!"
         )
 
@@ -1086,7 +1086,7 @@ class TestSegmenter(unittest.TestCase):
         )
         self.assertEqual(
             [s.annotations['attr'] for s in segmentation],
-            ['1', '2/'],
+            ['1', '2/3/'],
             msg="import_xml doesn't convert attributes!"
         )
 
@@ -1095,11 +1095,11 @@ class TestSegmenter(unittest.TestCase):
         segmentation = Segmenter.import_xml(
             self.xml_seg,
             element='a',
-            conditions={'attr': re.compile(r'^2/$')},
+            conditions={'attr': re.compile(r'^2/3/$')},
         )
         self.assertEqual(
             [s.annotations['attr'] for s in segmentation],
-            ['2/'],
+            ['2/3/'],
             msg="import_xml doesn't respect conditions!"
         )
 
@@ -1108,7 +1108,7 @@ class TestSegmenter(unittest.TestCase):
         segmentation = Segmenter.import_xml(
             self.xml_seg,
             element='a',
-            conditions={'attr': re.compile(r'^2/$')},
+            conditions={'attr': re.compile(r'^2/3/$')},
             remove_markup=True,
         )
         self.assertEqual(
@@ -1207,7 +1207,7 @@ class TestSegmenter(unittest.TestCase):
         )
         self.assertEqual(
             segmentation[0].annotations['attr'],
-            '2/',
+            '2/3/',
             msg="import_xml doesn't preserve leaves!"
         )
 
@@ -1470,7 +1470,7 @@ class TestSegmenter(unittest.TestCase):
         """Does _parse_xml_tag recognize xml elements?"""
         tags = [
             Segmenter._parse_xml_tag('<a>'),
-            Segmenter._parse_xml_tag('<a attr="http://test/">'),
+            Segmenter._parse_xml_tag('<a attr="http://test/more/">'),
             Segmenter._parse_xml_tag('</a>'),
             Segmenter._parse_xml_tag('<a/>'),
             Segmenter._parse_xml_tag('<!-- test -->'),
@@ -1501,7 +1501,7 @@ class TestSegmenter(unittest.TestCase):
         """Does _parse_xml_tag recognize opening tags?"""
         tags = [
             Segmenter._parse_xml_tag('<a>'),
-            Segmenter._parse_xml_tag('<a attr="http://test/"/>'),
+            Segmenter._parse_xml_tag('<a attr="http://test/more/"/>'),
             Segmenter._parse_xml_tag('</a>'),
         ]
         self.assertEqual(
@@ -1526,10 +1526,10 @@ class TestSegmenter(unittest.TestCase):
 
     def test_parse_xml_tag_attributes(self):
         """Does _parse_xml_tag parse attributes?"""
-        tag = Segmenter._parse_xml_tag('<a attr1="2" attr3="http://test/">')
+        tag = Segmenter._parse_xml_tag('<a attr1="2" attr3="http://test/more/">')
         self.assertEqual(
             tag['attributes'],
-            {'attr1': '2', 'attr3': 'http://test/'},
+            {'attr1': '2', 'attr3': 'http://test/more/'},
             msg="_parse_xml_tag doesn't parse attributes!"
         )
 
