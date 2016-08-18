@@ -22,12 +22,14 @@ from __future__ import absolute_import
 from __future__ import unicode_literals
 
 import unittest
+import re
 
 from LTTL.Segment import Segment
 from LTTL.Segmentation import Segmentation
 from LTTL.Input import Input
+import LTTL.Segmenter as Segmenter
 
-__version__ = "1.0.1"
+__version__ = "1.0.2"
 
 
 class TestSegment(unittest.TestCase):
@@ -257,6 +259,26 @@ class TestSegment(unittest.TestCase):
             ),
             [3, 4],
             msg="get_contained_sequence_indices doesn't return correct indices!"
+        )
+
+    def test_get_real_str_index_not_recoded(self):
+        """Does get_real_str_index() work with actual str index?"""
+        self.assertEqual(
+            self.char_seg[0].get_real_str_index(),
+            self.entire_text_seg[0].str_index,
+            msg="get_real_str_index() doesn't work with actual str index!"
+        )
+
+    def test_get_real_str_index_recoded(self):
+        """Does get_real_str_index() work with actual str index?"""
+        recoded_seg = Segmenter.recode(
+            self.char_seg,
+            substitutions=[(re.compile(r'[bd]'), 'f')],
+        )
+        self.assertEqual(
+            recoded_seg[-1].get_real_str_index(),
+            self.char_seg[0].str_index,
+            msg="get_real_str_index() doesn't work with redirected str index!"
         )
 
 

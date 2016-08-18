@@ -30,7 +30,7 @@ from .Segmentation import Segmentation
 
 from builtins import range
 
-__version__ = "1.0.2"
+__version__ = "1.0.3"
 
 
 class Segment(object):
@@ -82,6 +82,13 @@ class Segment(object):
                 ]
             ]
         )
+
+    def get_real_str_index(self):
+        """Return the index of the string which this segment refers to."""
+        str_index = self.str_index
+        if isinstance(Segmentation.data[str_index], int):
+            str_index = Segmentation.data[str_index]
+        return str_index
 
     def to_string(
         self,

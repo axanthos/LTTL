@@ -17,6 +17,8 @@ You should have received a copy of the GNU General Public License
 along with LTTL v2.0. If not, see <http://www.gnu.org/licenses/>.
 """
 
+# TODO: document merge_strings
+
 from __future__ import division
 from __future__ import absolute_import
 from __future__ import unicode_literals
@@ -37,7 +39,7 @@ from .Utils import (
     get_unused_char_in_segmentation,
 )
 
-__version__ = "1.0.0"
+__version__ = "1.0.1"
 
 
 def count_in_context(
@@ -513,6 +515,7 @@ def count_in_chain(
     left_size               size of left context              1
     right_size              size of right context             0
     unit_pos_marker         string indicating unit position   '_'
+    merge_strings           treat strings as contiguous?      False
 
     Returns a IntPivotCrosstab table.
     """
@@ -527,6 +530,7 @@ def count_in_chain(
         'left_size': 1,
         'right_size': 0,
         'unit_pos_marker': '_',
+        'merge_strings': False,
     }
     if units is not None:
         default_units.update(units)
@@ -548,6 +552,7 @@ def count_in_chain(
     unit_pos_marker = contexts['unit_pos_marker']
     seq_join = units['intra_seq_delimiter'].join
     window_size = context_left_size + context_right_size + unit_seq_length
+    merge_strings = contexts['merge_strings']
 
     if (
         unit_segmentation is not None and
@@ -566,6 +571,9 @@ def count_in_chain(
         else:
             unit_list = [u.get_content() for u in unit_segmentation]
 
+        # Get the list of string indices...
+        str_indices = [s.get_real_str_index() for s in unit_segmentation]
+
         # CASE 1: unit sequence length is greater than 1...
         if unit_seq_length > 1:
 
@@ -573,6 +581,19 @@ def count_in_chain(
             for window_index in range(
                 len(units['segmentation']) - (window_size - 1)
             ):
+
+                # Pass unless merges_strings is True or all str_indices in
+                # this window are equal...
+                idx_sequence = str_indices[
+                    window_index : window_index + window_size
+                ]
+                if(
+                    not merge_strings and
+                    idx_sequence.count(idx_sequence[0]) != len(idx_sequence)
+                ):
+                    if progress_callback:
+                        progress_callback()
+                    continue
 
                 # Get context type...
                 context_type = '%s%s%s' % (
@@ -627,6 +648,19 @@ def count_in_chain(
             for window_index in range(
                 len(units['segmentation']) - (window_size - 1)
             ):
+
+                # Pass unless merges_strings is True or all str_indices in
+                # this window are equal...
+                idx_sequence = str_indices[
+                    window_index : window_index + window_size
+                ]
+                if(
+                    not merge_strings and
+                    idx_sequence.count(idx_sequence[0]) != len(idx_sequence)
+                ):
+                    if progress_callback:
+                        progress_callback()
+                    continue
 
                 # Get context type...
                 context_type = '%s%s%s' % (
@@ -1868,6 +1902,7 @@ def neighbors(
     segmentation            context segmentation            None
     annotation_key          annotation to be displayed      None
     max_distance            maximum distance of neighbors   None
+    merge_strings           treat strings as contiguous?    False
 
     Returns a table.
     """
@@ -1881,6 +1916,7 @@ def neighbors(
         'segmentation': None,
         'annotation_key': None,
         'max_distance': None,
+        'merge_strings': False,
     }
     if units is not None:
         default_units.update(units)
@@ -1901,6 +1937,7 @@ def neighbors(
     unit_annotation_key = units['annotation_key']
     context_annotation_key = contexts['annotation_key']
     context_segmentation = contexts['segmentation']
+    merge_strings = contexts['merge_strings']
 
     # Loop over context token indices...
     for context_index, context_segment in enumerate(context_segmentation):
@@ -1936,32 +1973,43 @@ def neighbors(
                     new_values[(row_id, '__key_segment__')] \
                         = annotation_value
 
+            # Get unit token's str_index.
+            unit_token_str_index = unit_token.get_real_str_index()
+
             # Neighboring segments...
             for pos in adjacent_positions:
                 left_index = context_index - pos
                 if left_index >= 0:
                     left_token = context_segmentation[left_index]
-                    if context_annotation_key is not None:
-                        string_value = left_token.annotations.get(
-                            context_annotation_key,
-                            '__none__',
-                        )
-                    else:
-                        string_value = left_token.get_content()
-                    new_values[(row_id, text(pos) + 'L')] = \
-                        string_value
+                    if (
+                        merge_strings or
+                        unit_token_str_index == left_token.get_real_str_index()
+                    ):
+                        if context_annotation_key is not None:
+                            string_value = left_token.annotations.get(
+                                context_annotation_key,
+                                '__none__',
+                            )
+                        else:
+                            string_value = left_token.get_content()
+                        new_values[(row_id, text(pos) + 'L')] = \
+                            string_value
                 right_index = context_index + pos
                 if right_index < len(context_segmentation):
                     right_token = context_segmentation[right_index]
-                    if context_annotation_key is not None:
-                        string_value = right_token.annotations.get(
-                            context_annotation_key,
-                            '__none__',
-                        )
-                    else:
-                        string_value = right_token.get_content()
-                    new_values[(row_id, text(pos) + 'R')] = \
-                        string_value
+                    if (
+                        merge_strings or
+                        unit_token_str_index == right_token.get_real_str_index()
+                    ):
+                        if context_annotation_key is not None:
+                            string_value = right_token.annotations.get(
+                                context_annotation_key,
+                                '__none__',
+                            )
+                        else:
+                            string_value = right_token.get_content()
+                        new_values[(row_id, text(pos) + 'R')] = \
+                            string_value
 
         if progress_callback:
             progress_callback()
@@ -2005,6 +2053,7 @@ def collocations(
     annotation_key          annotation to be displayed      None
     max_distance            maximum distance of neighbors   None
     min_frequency           minimum type frequency          1
+    merge_strings           treat strings as contiguous?    False
 
     Returns a table.
     """
@@ -2014,6 +2063,7 @@ def collocations(
         'annotation_key': None,
         'max_distance': None,
         'min_frequency': 1,
+        'merge_strings': False,
     }
     if contexts is not None:
         default_contexts.update(contexts)
@@ -2032,6 +2082,7 @@ def collocations(
     context_annotation_key = contexts['annotation_key']
     context_segmentation = contexts['segmentation']
     context_min_frequency = contexts['min_frequency']
+    merge_strings = contexts['merge_strings']
 
     # Get the list of context segments in final formats
     if context_annotation_key is not None:
@@ -2056,16 +2107,30 @@ def collocations(
             = global_freq.get(context_list[context_index], 0) + 1
 
         # Loop over contained units.
-        for _ in context_token.get_contained_segment_indices(units):
+        for unit_index in context_token.get_contained_segment_indices(units):
+
+            # Get unit token's str_index.
+            unit_token_str_index = units[unit_index].get_real_str_index()
 
             # Neighboring segments...
             for pos in adjacent_positions:
                 left_index = context_index - pos
                 if left_index >= 0:
-                    neighbor_indices.add(left_index)
+                    if (
+                        merge_strings or
+                        unit_token_str_index ==
+                          context_segmentation[left_index].get_real_str_index()
+                    ):
+                        neighbor_indices.add(left_index)
+                    ###
                 right_index = context_index + pos
                 if right_index < len(context_segmentation):
-                    neighbor_indices.add(right_index)
+                    if (
+                        merge_strings or
+                        unit_token_str_index ==
+                          context_segmentation[right_index].get_real_str_index()
+                    ):
+                        neighbor_indices.add(right_index)
 
         if progress_callback:
             progress_callback()
