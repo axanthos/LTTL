@@ -39,7 +39,7 @@ from .Utils import (
     get_unused_char_in_segmentation,
 )
 
-__version__ = "1.0.1"
+__version__ = "1.0.2 "
 
 
 def count_in_context(
@@ -2122,7 +2122,6 @@ def collocations(
                           context_segmentation[left_index].get_real_str_index()
                     ):
                         neighbor_indices.add(left_index)
-                    ###
                 right_index = context_index + pos
                 if right_index < len(context_segmentation):
                     if (
@@ -2212,13 +2211,18 @@ def cooc_in_window(
         np_contingency,
     )
     try:
+        new_header_row_id = (
+            contingency.header_row_id[:-2]
+            + "2"
+            + contingency.header_row_id[-2:]
+        )
         return IntPivotCrosstab.from_numpy(
             contingency.col_ids[:],
             contingency.col_ids[:],
             cooc,
             contingency.header_row_id,
             contingency.header_row_type,
-            contingency.header_row_id,
+            new_header_row_id,
             contingency.header_row_type,
             contingency.col_type,
         )
@@ -2257,14 +2261,22 @@ def cooc_in_context(
             np_contingency = np_contingency[keep_from_contingency].astype(int)
             np_contingency2 = np_contingency2[keep_from_contingency2].astype(int)
             cooc = np.dot(np.transpose(np_contingency2), np_contingency)
+            if contingency.header_row_id == contingency2.header_row_id:
+                new_header_row_id = (
+                    contingency.header_row_id[:-2]
+                    + "2"
+                    + contingency.header_row_id[-2:]
+                )
+            else:
+                new_header_row_id = contingency.header_row_id
             return IntPivotCrosstab.from_numpy(
                 contingency2.col_ids[:],
                 contingency.col_ids[:],
                 cooc,
-                contingency.header_col_id,
-                contingency.header_col_type,
-                contingency2.header_col_id,
-                contingency2.header_col_type,
+                contingency.header_row_id,
+                contingency.header_row_type,
+                new_header_row_id,
+                contingency2.header_row_type,
                 contingency.col_type,
             )
         except IndexError:
@@ -2272,14 +2284,19 @@ def cooc_in_context(
     else:
         cooc = np.dot(np.transpose(np_contingency), np_contingency)
         try:
+            new_header_row_id = (
+                contingency.header_row_id[:-2]
+                + "2"
+                + contingency.header_row_id[-2:]
+            )
             return IntPivotCrosstab.from_numpy(
                 contingency.col_ids[:],
                 contingency.col_ids[:],
                 cooc,
-                contingency.header_col_id,
-                contingency.header_col_type,
-                contingency.header_col_id,
-                contingency.header_col_type,
+                contingency.header_row_id,
+                contingency.header_row_type,
+                new_header_row_id,
+                contingency.header_row_type,
                 contingency.col_type,
             )
         except IndexError:
