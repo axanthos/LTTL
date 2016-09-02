@@ -39,7 +39,7 @@ from .Utils import (
     get_unused_char_in_segmentation,
 )
 
-__version__ = "1.0.2 "
+__version__ = "1.0.2"
 
 
 def count_in_context(

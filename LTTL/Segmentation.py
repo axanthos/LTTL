@@ -30,7 +30,7 @@ import os
 from tempfile import NamedTemporaryFile
 from collections import deque
 
-__version__ = "1.0.1"
+__version__ = "1.0.2"
 
 # segmentation with more segments will have
 # their string representation summarized
@@ -623,78 +623,66 @@ class Segmentation(object):
 
         # Define HTML header, footer and other template elements...
         html_header = """
-             <html><head><style type="text/css">
-                 table.textable {
-                     border-width: 1px;
-                     border-style: solid;
-                     border-color: gray;
-                     background-color: white;
-                 }
-                 table.textable th {
-                     border-width: 0px;
-                     padding: 3px;
-                     background-color: lightgray;
-                 }
-                 table.textable td {
-                     border-width: 0px;
-                     padding: 3px;
-                 }
-             </style></head><body><a name="top"/>
-         """
-        html_footer = '</body></html>'
-        table_header = '<p><table class="textable">\n'
-        wide_table_header = '<p><table class="textable" width="100%">\n'
-        table_footer = '</table></p>\n'
-        first_row_address = '<tr><th align="left">String index</th>' \
-                            + '<th align="left">Start</th>' \
-                            + '<th align="left">End</th></tr>\n'
-        first_row_annotation = '<tr><th align="left">Annotation key</th>' \
-                               + '<th align="left">Annotation value</th></tr>\n'
-        first_row_content = '<tr><th align="left">Content</th></tr>\n'
+            <html><head><style type="text/css">
+                table {
+                    border-width: 1px;
+                    border-style: solid;
+                    border-color: gray;
+                    background-color: white;
+                    width: 100%;
+                }
+                td {
+                    border-width: 0px;
+                    padding: 3px;
+                    text-align: left;
+                }
+                td.h {
+                    font-weight: bold;
+                    background-color: lightgray;
+                    font-size: 120%;
+                }
+                td.k {
+                    background-color: #e6e6e6;
+                    white-space: nowrap;
+                }
+                td.v {
+                    background-color: #f2f2f2;
+                    font-style: italic;
+                    width: 100%;
+                }
+            </style></head><body><a name="top"/>
+        """
+
+        html_header += "<h2>%s<br/></h2>" % self.label
 
         summarized = False
 
         if display_all:
 
             string = html_header
-            string += '<h2>%s</h2>\n' % self.label
-
-            string += '\n'.join(
+            string += '<br/>'.join(
                 [
                     segment.to_html(
                         offset,
                         index+1,
-                        table_header,
-                        first_row_address,
-                        first_row_annotation,
-                        first_row_content,
-                        wide_table_header,
-                        table_footer,
                         progress_callback
                     )
                     for index, segment in enumerate(self)
                 ]
             )
-            string += html_footer
+            string += "</body></html>"
 
         else:
 
             summarized = True
 
             string = html_header
-            string += '<h2>%s</h2>\n' % self.label
 
-            string += '\n'.join(
+            string += '<br/>'.join(
                 [
                     self[index].to_html(
                         offset,
                         index+1,
-                        table_header,
-                        first_row_address,
-                        first_row_annotation,
-                        first_row_content,
-                        wide_table_header,
-                        table_footer,
                         progress_callback
                     )
                     for index in range(min(len(self), NUM_SEGMENTS_SUMMARY))
@@ -704,17 +692,11 @@ class Segmentation(object):
             string += '<p><i>[%i segments not displayed...]</i></p>' %  \
                       (len(self) - 2 * NUM_SEGMENTS_SUMMARY)
 
-            string += '\n'.join(
+            string += '<br/>'.join(
                 [
                     self[index].to_html(
                         offset,
                         index+1,
-                        table_header,
-                        first_row_address,
-                        first_row_annotation,
-                        first_row_content,
-                        wide_table_header,
-                        table_footer,
                         progress_callback
                     )
                     for index in range(
@@ -724,7 +706,7 @@ class Segmentation(object):
                 ]
             )
 
-            string += html_footer
+            string += "</body></html>"
 
         return string, summarized
 

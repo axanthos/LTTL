@@ -31,7 +31,7 @@ import sys
 
 import unittest
 
-__version__ = "1.0.0"
+__version__ = "1.0.1"
 __author__ = "Mahtab Mohammadi"
 __maintainer__ = "LangTech Sarl"
 
@@ -92,7 +92,7 @@ class TestCooc(unittest.TestCase):
         }
         self.window_woa_header_row_id = '__unit__'
         self.window_woa_header_row_type = 'string'
-        self.window_woa_header_col_id = '__unit__'
+        self.window_woa_header_col_id = '__unit2__'
         self.window_woa_header_col_type = 'string'
         self.window_woa_col_type = {
             col_id: 'continuous' for col_id in self.window_woa_col_ids
@@ -119,7 +119,7 @@ class TestCooc(unittest.TestCase):
         }
         self.window_wa_header_row_id = '__unit__'
         self.window_wa_header_row_type = 'string'
-        self.window_wa_header_col_id = '__unit__'
+        self.window_wa_header_col_id = '__unit2__'
         self.window_wa_header_col_type = 'string'
         self.window_wa_col_type = {
             col_id: 'continuous' for col_id in self.window_wa_col_ids
@@ -165,9 +165,9 @@ class TestCooc(unittest.TestCase):
             ('x', 'e'): 1,
             ('x', 'x'): 1,
         }
-        self.context_wos_woa_header_row_id = '__context__'
+        self.context_wos_woa_header_row_id = '__unit__'
         self.context_wos_woa_header_row_type = 'string'
-        self.context_wos_woa_header_col_id = '__context__'
+        self.context_wos_woa_header_col_id = '__unit2__'
         self.context_wos_woa_header_col_type = 'string'
         self.context_wos_woa_col_type = {
             col_id: 'continuous' for col_id in self.context_wos_woa_col_ids
@@ -192,9 +192,9 @@ class TestCooc(unittest.TestCase):
             ('C', 'V'): 2,
             ('C', 'C'): 2,
         }
-        self.context_wos_wa_header_row_id = '__context__'
+        self.context_wos_wa_header_row_id = '__unit__'
         self.context_wos_wa_header_row_type = 'string'
-        self.context_wos_wa_header_col_id = '__context__'
+        self.context_wos_wa_header_col_id = '__unit2__'
         self.context_wos_wa_header_col_type = 'string'
         self.context_wos_wa_col_type = {
             col_id: 'continuous' for col_id in self.context_wos_wa_col_ids
@@ -221,9 +221,9 @@ class TestCooc(unittest.TestCase):
             ('x', 'u'): 0,
             ('x', 'e'): 1,
         }
-        self.context_ws_woa_header_row_id = '__context__'
+        self.context_ws_woa_header_row_id = '__unit__'
         self.context_ws_woa_header_row_type = 'string'
-        self.context_ws_woa_header_col_id = '__context__'
+        self.context_ws_woa_header_col_id = '__unit2__'
         self.context_ws_woa_header_col_type = 'string'
         self.context_ws_woa_col_type = {
             col_id: 'continuous' for col_id in self.context_ws_woa_col_ids
@@ -245,9 +245,9 @@ class TestCooc(unittest.TestCase):
         self.context_ws_wa_values = {
             ('C', 'V'): 2,
         }
-        self.context_ws_wa_header_row_id = '__context__'
+        self.context_ws_wa_header_row_id = '__unit__'
         self.context_ws_wa_header_row_type = 'string'
-        self.context_ws_wa_header_col_id = '__context__'
+        self.context_ws_wa_header_col_id = '__unit2__'
         self.context_ws_wa_header_col_type = 'string'
         self.context_ws_wa_col_type = {
             col_id: 'continuous' for col_id in self.context_ws_wa_col_ids

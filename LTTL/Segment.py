@@ -30,7 +30,7 @@ from .Segmentation import Segmentation
 
 from builtins import range
 
-__version__ = "1.0.3"
+__version__ = "1.0.4"
 
 
 class Segment(object):
@@ -170,49 +170,43 @@ class Segment(object):
             self,
             offset=0,
             counter=0,
-            table_header='',
-            first_row_address='',
-            first_row_annotation='',
-            first_row_content='',
-            wide_table_header='',
-            table_footer='',
             progress_callback=None
     ):
-        """Stringify a segmentation in HTML format and returns an iterator.
+        """Stringify a segment in HTML format and returns an iterator.
         Useful when the actual string doesn't fit in memory.
 
-        :param humanize_addresses: boolean indicating whether positions in
-        strings should be numbered from 1, rather than from 0 as usual (default
-        False)
+        :param offset: an int that will be added to address element (default 0)
 
-        :param progress_callback: callback for monitoring progress ticks (number
-        of input segments)
+        :param counter: the segment index within a segmentation (default 0)
+
+        :param progress_callback: callback for monitoring progress ticks
+        (1 tick per call to this method)
 
         :return: HTML formatted string
         """
 
-        # Add (or not) a 1-unit offset to make addresses more readable.
-
-        string = ''
-
         if progress_callback:
             progress_callback()
 
-        # Format address section...
-        str_index = self.str_index
-        start = self.start or 0
-        end = self.end or len(Segmentation.get_data(str_index))
-        address_string = '<tr><td>%s</td><td>%s</td><td>%s</td></tr>\n' % (
-            str_index + offset,
-            start + offset,
-            end,
+        # Format main header...
+        html_string = '<a name="%i"/>\n' % counter
+        html_string += (
+            '<table width="100%">\n<tr><td class="h" colspan="2">Segment #'
+            + ('%s&nbsp;&nbsp;[%s:%s-%s]</td></tr>' % (
+                    counter,
+                    self.str_index + offset,
+                    (self.start or 0) + offset,
+                    self.end or len(Segmentation.get_data(self.str_index)),
+                )
+            )
         )
 
         # Format annotation section...
-        annotation_string = ''.join(
-            '<tr><td>%s</td><td>%s</td></tr>\n' % (k, v)
-            for (k, v) in sorted(self.annotations.items())
-        )
+        if len(self.annotations):
+            html_string += ''.join(
+               '<tr><td class="k">%s</td><td class="v" width="100%%">%s</td></tr>\n' % (k, v)
+               for (k, v) in sorted(self.annotations.items())
+            )
 
         # Replace tag delimiters with HTML entities and CR with HTML tag...
         content = self.get_content().replace('<', '&lt;')
@@ -220,27 +214,9 @@ class Segment(object):
         content = content.replace('\n', '<br/>')
 
         # Add formatted HTML for this segment...
-        # yield '<h3>Segment #%i</h3>\n' % counter
-        string += '<h3>Segment #%i</h3><a name="%i"/>\n' % (counter, counter)
+        html_string += '<tr><td colspan="2">%s</td></tr></table>' % content
 
-        string += table_header
-
-        string += first_row_address
-        string += address_string
-        string += table_footer
-
-        if len(self.annotations):
-            string += table_header
-            string += first_row_annotation
-            string += annotation_string
-            string += table_footer
-
-        string += wide_table_header
-        string += first_row_content
-        string += '<tr><td>%s</td></tr>\n' % content
-        string += table_footer
-
-        return string
+        return html_string
 
     def get_content(self):
         """Stringify the content of a Segment
