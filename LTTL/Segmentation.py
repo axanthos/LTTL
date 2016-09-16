@@ -643,7 +643,7 @@ class Segmentation(object):
                 }
                 td.k {
                     background-color: #e6e6e6;
-                    white-space: nowrap;
+                    white-space: pre;
                 }
                 td.v {
                     background-color: #f2f2f2;
