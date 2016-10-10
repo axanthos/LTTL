@@ -39,7 +39,7 @@ from .Utils import (
     get_unused_char_in_segmentation,
 )
 
-__version__ = "1.0.3"
+__version__ = "1.0.4"
 
 
 def count_in_context(
@@ -562,7 +562,7 @@ def count_in_chain(
         # Get the list of units in final format (content or annotation)...
         if unit_annotation_key is not None:
             unit_list = [
-               unicode(
+               text(
                     unit_token.annotations.get(
                         unit_annotation_key,
                         '__none__',  # Default annotation
@@ -1700,7 +1700,7 @@ def annotate_contexts(
         else:
             new_values[(row_id, '__annotation__')] = (
                 multiple_values['value_delimiter'].join(
-                    unicode(a) for a in annotations
+                    text(a) for a in annotations
                 )
             )
 
