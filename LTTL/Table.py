@@ -42,7 +42,7 @@ from builtins import str as text
 from future.utils import iteritems
 from past.builtins import xrange
 
-__version__ = "1.0.1"
+__version__ = "1.0.2"
 
 
 class Table(object):
@@ -185,12 +185,97 @@ class Table(object):
 
     # Method to_orange_table() is defined differently for Python 2 and 3.
     if sys.version_info.major >= 3:
-
-        # TODO: Implement and test.
+        # TODO: test.
         def to_orange_table(self, encoding='iso-8859-15'):
-            """Create an Orange 3 table."""
-            raise NotImplementedError('method not implemented yet!')
+            """Create an Orange 3 table.
+            :param encoding: ignored
+            :return: an Orange 3 table
+            NB:
+            - Columns without a col_type will be set to 'string' by default.
+            """
 
+            import Orange   # This can raise an ImportError.
+
+            # Initialize list of features.
+            attr_vars, class_vars, meta_vars = [], [], []
+
+            # Get ordered list of col headers (with class col at the end)...
+            ordered_cols = [self.header_col_id]
+            ordered_cols.extend(
+                [x for x in self.col_ids if x != self.class_col_id]
+            )
+            if self.class_col_id:
+                ordered_cols.append(self.class_col_id)
+
+            # ... reorder so all string columns are last. The order will be
+            # match the final domains (i.e. `domain.atrributes +
+            # domain.class_vars + domain.metas`)
+            def col_type_for_id(col_id):
+                if col_id == self.header_col_id:
+                    return self.header_col_type
+                else:
+                    return self.col_type.get(col_id, 'string')
+
+            col_type_sort_key = {'discrete': 0, 'continuous': 0, 'string': 1}
+            ordered_cols = list(sorted(
+                ordered_cols,
+                key=lambda col_id: col_type_sort_key[col_type_for_id(col_id)]
+            ))
+
+            # For each col header...
+            for col_id in ordered_cols:
+                # Convert it to string
+                str_col_id = text(col_id)
+                col_type = col_type_for_id(col_id)
+                if col_type == 'string':
+                    var = Orange.data.StringVariable(str_col_id)
+                    meta_vars.append(var)  # string variables are always meta
+                elif col_type == 'continuous':
+                    var = Orange.data.ContinuousVariable(str_col_id)
+                    if col_id == self.class_col_id:
+                        class_vars.append(var)
+                    else:
+                        attr_vars.append(var)
+                elif col_type == 'discrete':
+                    values = list()
+                    if col_id == self.header_col_id:
+                        for row_id in self.row_ids:
+                            value = text(row_id)
+                            if value not in values:
+                                values.append(value)
+                    else:
+                        for row_id in self.row_ids:
+                            if (row_id, col_id) in self.values:
+                                value = text(self.values[(row_id, col_id)])
+                                if value not in values:
+                                    values.append(value)
+                    var = Orange.data.DiscreteVariable(
+                        name=str_col_id, values=values,
+                    )
+                    if col_id == self.class_col_id:
+                        class_vars.append(var)
+                    else:
+                        attr_vars.append(var)
+
+            # Create Orange 3 domain and table
+            domain = Orange.data.Domain(attr_vars, class_vars, meta_vars)
+            orange_table = Orange.data.Table(domain)
+
+            rows = []
+            for row_id in self.row_ids:
+                row_data = list()
+                for col_id, col_var in zip(ordered_cols, domain.variables + domain.metas):
+                    if col_id == self.header_col_id:
+                        value = row_id
+                    else:
+                        value = self.values.get((row_id, col_id), None)
+                    if value is not None:
+                        value = text(value)
+                    row_data.append(value)
+                rows.append(Orange.data.Instance(domain, row_data))
+            orange_table.extend(rows)
+
+            return orange_table
     else:
         # TODO: test.
         def to_orange_table(self, encoding='iso-8859-15'):
