@@ -236,6 +236,10 @@ class Table(object):
                         class_vars.append(var)
                     else:
                         attr_vars.append(var)
+                    # Make sure integer values will be displayed/formatted
+                    # correctly
+                    if isinstance(self, (IntPivotCrosstab, IntWeightedFlatCrosstab)):
+                        var.number_of_decimals = 0
                 elif col_type == 'discrete':
                     values = list()
                     if col_id == self.header_col_id:
@@ -261,6 +265,10 @@ class Table(object):
             domain = Orange.data.Domain(attr_vars, class_vars, meta_vars)
             orange_table = Orange.data.Table(domain)
 
+            if self.missing is not None:
+                missing = text(self.missing)
+            else:
+                missing = None
             rows = []
             for row_id in self.row_ids:
                 row_data = list()
@@ -270,7 +278,12 @@ class Table(object):
                     else:
                         value = self.values.get((row_id, col_id), None)
                     if value is not None:
+                        if isinstance(value, int):
+                            # Assume all column values are of the same type
+                            col_var.number_of_decimals = 0
                         value = text(value)
+                    else:
+                        value = missing
                     row_data.append(value)
                 rows.append(Orange.data.Instance(domain, row_data))
             orange_table.extend(rows)
