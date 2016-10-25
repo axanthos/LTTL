@@ -26,14 +26,14 @@ from setuptools import setup, find_packages
 from codecs import open
 from os import path
 
-__version__ = "1.0.7"
+__version__ = "1.0.8"
 
 here = path.abspath(path.dirname(__file__))
 
 with open(path.join(here, 'README.rst'), encoding='utf-8') as f:
     long_description = f.read()
 
-package_version = '2.0b2'
+package_version = '2.0b3'
 url = 'https://github.com/axanthos/LTTL/tarball/v' + package_version
 
 setup(

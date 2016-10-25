@@ -42,7 +42,7 @@ from builtins import str as text
 from future.utils import iteritems
 from past.builtins import xrange
 
-__version__ = "1.0.2"
+__version__ = "1.0.3"
 
 
 class Table(object):
@@ -208,7 +208,7 @@ class Table(object):
                 ordered_cols.append(self.class_col_id)
 
             # ... reorder so all string columns are last. The order will be
-            # match the final domains (i.e. `domain.atrributes +
+            # match the final domains (i.e. `domain.attributes +
             # domain.class_vars + domain.metas`)
             def col_type_for_id(col_id):
                 if col_id == self.header_col_id:
@@ -238,7 +238,10 @@ class Table(object):
                         attr_vars.append(var)
                     # Make sure integer values will be displayed/formatted
                     # correctly
-                    if isinstance(self, (IntPivotCrosstab, IntWeightedFlatCrosstab)):
+                    if isinstance(
+                        self, 
+                        (IntPivotCrosstab, IntWeightedFlatCrosstab)
+                    ):
                         var.number_of_decimals = 0
                 elif col_type == 'discrete':
                     values = list()
@@ -272,7 +275,10 @@ class Table(object):
             rows = []
             for row_id in self.row_ids:
                 row_data = list()
-                for col_id, col_var in zip(ordered_cols, domain.variables + domain.metas):
+                for col_id, col_var in zip(
+                    ordered_cols, 
+                    domain.variables + domain.metas
+                ):
                     if col_id == self.header_col_id:
                         value = row_id
                     else:

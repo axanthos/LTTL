@@ -45,7 +45,7 @@ from builtins import range
 from builtins import str as text
 from builtins import dict
 
-__version__ = "1.0.2"
+__version__ = "1.0.3"
 
 
 def concatenate(
@@ -1229,7 +1229,7 @@ def _merge_duplicate_segments(segmentation, take_first=False):
     :return: output segmentation with merged segments
     """
 
-    new_segments = Segmentation()
+    new_segments = Segmentation(label=segmentation.label)
 
     last_seen = None
 
