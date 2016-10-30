@@ -42,7 +42,7 @@ from builtins import str as text
 from future.utils import iteritems
 from past.builtins import xrange
 
-__version__ = "1.0.3"
+__version__ = "1.0.4"
 
 
 class Table(object):
@@ -239,7 +239,7 @@ class Table(object):
                     # Make sure integer values will be displayed/formatted
                     # correctly
                     if isinstance(
-                        self, 
+                        self,
                         (IntPivotCrosstab, IntWeightedFlatCrosstab)
                     ):
                         var.number_of_decimals = 0
@@ -276,7 +276,7 @@ class Table(object):
             for row_id in self.row_ids:
                 row_data = list()
                 for col_id, col_var in zip(
-                    ordered_cols, 
+                    ordered_cols,
                     domain.variables + domain.metas
                 ):
                     if col_id == self.header_col_id:
@@ -979,12 +979,7 @@ class IntPivotCrosstab(PivotCrosstab):
         """Return a table with Markov associativities between columns
         (cf. Bavaud & Xanthos 2005, Deneulin et al. 2014)
         """
-        # orange_table = self.to_orange_table('utf8')
-        # freq_table = Orange.data.preprocess.RemoveDiscrete(orange_table)
-        # freq = freq_table.to_numpy()[0]
         freq = self.to_numpy()
-        if self.header_col_type == 'continuous':
-            freq = freq[::, 1::]
         total_freq = freq.sum()
         sum_col = freq.sum(axis=0)
         sum_row = freq.sum(axis=1)
@@ -1006,11 +1001,11 @@ class IntPivotCrosstab(PivotCrosstab):
         col_ids = self.col_ids
         values = dict()
         for col_id_idx1 in xrange(len(col_ids)):
-            col_id1 = text(col_ids[col_id_idx1])
+            col_id1 = col_ids[col_id_idx1]
             values.update(
                 dict(
                     (
-                        (col_id1, text(col_ids[i])),
+                        (col_id1, col_ids[i]),
                         output_matrix[col_id_idx1, i]
                     )
                     for i in xrange(len(col_ids))
@@ -1018,13 +1013,20 @@ class IntPivotCrosstab(PivotCrosstab):
             )
             if progress_callback:
                 progress_callback()
+        new_header_row_id = (
+            self.header_row_id[:-2]
+            + "2"
+            + self.header_row_id[-2:]
+        )
         return (
             PivotCrosstab(
                 self.col_ids[:],
                 self.col_ids[:],
                 values,
-                header_col_id='__unit__',
-                header_col_type='string',
+                new_header_row_id,
+                self.header_row_type,
+                self.header_row_id,
+                self.header_row_type,
                 col_type=self.col_type.copy(),
             )
         )
