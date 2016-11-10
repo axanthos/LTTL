@@ -30,7 +30,7 @@ import os
 from tempfile import NamedTemporaryFile
 from collections import deque
 
-__version__ = "1.0.2"
+__version__ = "1.0.3"
 
 # segmentation with more segments will have
 # their string representation summarized
@@ -554,7 +554,7 @@ class Segmentation(object):
                 for match in re.finditer(r'(?<=%\()(.+?)(?=\))', formatting):
                     default_dict[match.group(0)] = '__none__'
 
-            string += '\n'.join(
+            string += segment_delimiter.join(
                 [
                     self[index].to_string(
                         formatting,
@@ -570,7 +570,7 @@ class Segmentation(object):
             string += '\n\n[%i segments not displayed...]\n\n' %  \
                       (len(self) - 2 * NUM_SEGMENTS_SUMMARY)
 
-            string += '\n'.join(
+            string += segment_delimiter.join(
                 [
                     self[index].to_string(
                         formatting,
