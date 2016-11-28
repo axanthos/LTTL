@@ -41,7 +41,7 @@ import random, math
 from .Segmentation import Segmentation
 from .Segment import Segment
 
-__version__ = "1.0.0"
+__version__ = "1.0.1"
 
 
 def iround(x):
@@ -106,7 +106,7 @@ def get_variety(
                     unit_dict[k] = unit_dict.get(k, 0) + 1
             varieties = list()
             weights = list()
-            for category in category_dict.iterkeys():
+            for category in category_dict:
                 if category_weighting:
                     weights.append(category_dict[category])
                 local_unit_dict = tuple_to_simple_dict(
