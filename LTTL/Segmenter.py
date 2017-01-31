@@ -45,7 +45,7 @@ from builtins import range
 from builtins import str as text
 from builtins import dict
 
-__version__ = "1.0.3"
+__version__ = "1.0.4"
 
 
 def concatenate(
@@ -624,7 +624,10 @@ def threshold(
 
         # Get relevant item (content or annotation key)...
         if annotation_key:
-            token = segment.annotations[annotation_key]
+            try:
+                token = segment.annotations[annotation_key]
+            except KeyError:
+                token = '__none__'
         else:
             token = segment.get_content()
 
