@@ -38,7 +38,6 @@ from .Utils import (
     prepend_unit_with_category,
     generate_random_annotation_key,
     get_unused_char_in_segmentation,
-    iround,
 )
 
 __version__ = "1.0.5"
@@ -1356,9 +1355,6 @@ def variety_in_context(
         default_contexts.update(contexts)
     contexts = default_contexts
 
-    # Inititalize target lexematic diversity (for RMSP computation).
-    target_NLTTR = 0
-
     # If categories are specified...
     if measure_per_category:
         if units['seq_length'] > 1:
@@ -1385,32 +1381,11 @@ def variety_in_context(
                 'segmentation': recoded_units,
                 'annotation_key': new_annotation_key,
                 'seq_length': units['seq_length'],
+                'weighting': units['weighting'],
             },
             contexts,
             progress_callback,
         )
-        category_counts = count_in_context(
-            {
-                'segmentation': units['segmentation'],
-                'annotation_key': categories['annotation_key'],
-                'seq_length': units['seq_length'],
-            },
-            contexts,
-            progress_callback,
-        )
-        if apply_resampling:
-            # Compute target lexematic diversity (for RMSP)...
-            expected_varieties = list()
-            for row_id in category_counts.row_ids:
-                row = tuple_to_simple_dict(category_counts.values, row_id)
-                try:
-                    expected_varieties.append(
-                        get_expected_subsample_variety(row, subsample_size)
-                    )
-                except ValueError:
-                    pass
-            if expected_varieties:
-                target_NLTTR = max(expected_varieties) / subsample_size
 
     # Else if categories are not specified...
     else:
@@ -1436,43 +1411,10 @@ def variety_in_context(
             row_id = default_row_id
         if apply_resampling:
             if measure_per_category:
-
-                # Find optimal subsample size (RMSP)...
-                cat_row = tuple_to_simple_dict(
-                    category_counts.values,
-                    row_id,
-                )
-                if subsample_size > sum(cat_row.values()):
-                    continue
-                size_low, size_high = 2, subsample_size
-                size_tmp = size_high
-                NLTTR_tmp = get_expected_subsample_variety(cat_row, size_tmp)  \
-                            / size_tmp
-                while(True):
-                    if NLTTR_tmp == target_NLTTR or size_low == size_high:
-                        break
-                    if size_high - size_low == 1:
-                        high = get_expected_subsample_variety(cat_row, size_high) \
-                                / size_high
-                        low = get_expected_subsample_variety(cat_row, size_low) \
-                                / size_low
-                        if high - target_NLTTR < target_NLTTR - low:
-                            size_tmp = size_high
-                        else:
-                            size_tmp = size_low
-                        break
-                    size_tmp = iround((size_low+size_high) / 2)
-                    NLTTR_tmp = get_expected_subsample_variety(cat_row, size_tmp)  \
-                                / size_tmp
-                    if NLTTR_tmp < target_NLTTR:
-                        size_high = size_tmp
-                    elif NLTTR_tmp > target_NLTTR:
-                        size_low = size_tmp
-
                 varieties = list()
                 for i in range(num_subsamples):
                     try:
-                        sampled_row = sample_dict(row, size_tmp)
+                        sampled_row = sample_dict(row, subsample_size)
                         varieties.append(
                             get_variety(
                                 sampled_row,
@@ -1490,14 +1432,10 @@ def variety_in_context(
                         new_values[(row_id, '__variety_average__')],
                         new_values[(row_id, '__variety_std_deviation__')],
                     ) = get_average(varieties)
-                    new_values[(row_id, '__subsample_size__')] = size_tmp
                     new_values[(row_id, '__variety_count__')] = num_subsamples
             else:
-                try:
-                    new_values[(row_id, '__expected_variety__')]    \
-                        = get_expected_subsample_variety(row, subsample_size)
-                except ValueError:
-                    pass
+                new_values[(row_id, '__expected_variety__')]    \
+                    = get_expected_subsample_variety(row, subsample_size)
         else:
             new_values[(row_id, '__variety__')] = get_variety(
                 row,
@@ -1516,7 +1454,6 @@ def variety_in_context(
             new_col_ids = [
                 '__variety_average__',
                 '__variety_std_deviation__',
-                '__subsample_size__',
                 '__variety_count__',
             ]
         else:

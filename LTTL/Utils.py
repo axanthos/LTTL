@@ -20,6 +20,7 @@ Provides public functions:
 - iround()
 - sample_dict()
 - get_variety()
+- get_expected_subsample_variety
 - get_average()
 - get_perplexity()
 - tuple_to_simple_dict()
@@ -36,12 +37,14 @@ from __future__ import unicode_literals
 from future.utils import iteritems, itervalues
 from builtins import range, chr
 
-import random, math
+import random, math, functools
+
+from scipy.special import binom
 
 from .Segmentation import Segmentation
 from .Segment import Segment
 
-__version__ = "1.0.1"
+__version__ = "1.0.2"
 
 
 def iround(x):
@@ -121,6 +124,38 @@ def get_variety(
                 weights = None
             (average, stdev) = get_average(varieties, weights)
             return average
+
+
+def get_expected_subsample_variety(dictionary, subsample_size):
+    """Compute the expected variety of a subsample of given size drawn from a
+    given frequency dictionary.
+    """
+    sample_size = sum(dictionary.values())
+    if subsample_size > sample_size:
+        raise ValueError(u'Not enough elements in dictionary')
+    num_subsamples = binom(sample_size, subsample_size)
+    expected_variety = len(dictionary)
+    for freq in dictionary.values():
+        expected_variety -= _prob_no_occurrence(
+            sample_size, subsample_size, freq, num_subsamples
+        )
+    return expected_variety
+
+
+@functools.lru_cache(maxsize=None)
+def _prob_no_occurrence(
+        sample_size,
+        subsample_size,
+        sample_freq,
+        num_subsamples
+    ):
+    """Compute the probability that an type with a given probability does not
+    occur in a subsample of given size drawn from a population of a given size.
+    """
+    if sample_freq > sample_size - subsample_size:
+        return 0
+    else:
+        return binom(sample_size-sample_freq, subsample_size) / num_subsamples
 
 
 def tuple_to_simple_dict(dictionary, key):
