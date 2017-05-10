@@ -39,12 +39,12 @@ from builtins import range, chr
 
 import random, math, functools
 
-from scipy.special import binom
+from scipy.misc import comb as binom
 
 from .Segmentation import Segmentation
 from .Segment import Segment
 
-__version__ = "1.0.2"
+__version__ = "1.0.3"
 
 
 def iround(x):
@@ -133,7 +133,7 @@ def get_expected_subsample_variety(dictionary, subsample_size):
     sample_size = sum(dictionary.values())
     if subsample_size > sample_size:
         raise ValueError(u'Not enough elements in dictionary')
-    num_subsamples = binom(sample_size, subsample_size)
+    num_subsamples = binom(sample_size, subsample_size, exact=True)
     expected_variety = len(dictionary)
     for freq in dictionary.values():
         expected_variety -= _prob_no_occurrence(
@@ -155,7 +155,11 @@ def _prob_no_occurrence(
     if sample_freq > sample_size - subsample_size:
         return 0
     else:
-        return binom(sample_size-sample_freq, subsample_size) / num_subsamples
+        return binom(
+            sample_size-sample_freq,
+            subsample_size,
+            exact=True
+        ) / num_subsamples
 
 
 def tuple_to_simple_dict(dictionary, key):
