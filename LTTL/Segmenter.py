@@ -45,7 +45,7 @@ from builtins import range
 from builtins import str as text
 from builtins import dict
 
-__version__ = "1.0.4"
+__version__ = "1.0.5"
 
 
 def concatenate(
@@ -1100,10 +1100,11 @@ def recode(
     :param progress_callback: callback for monitoring progress ticks (1 for
     each input segment)
 
-    :return: new segmentation containing the recoded segments; this will be
-    an Input object if it contains only one segment, and a Segmentation object
-    if it contains more than one segments (or if no string was modified by the
-    specified recoding operations).
+    :return: tuple whose first element is a new segmentation containing the
+    recoded segments (this will be an Input object if it contains only one
+    segment, and a Segmentation object if it contains more than one segments or
+    if no string was modified by the specified recoding operations); the second
+    element is the total number of replacements performed.
 
     Replacement strings may contain backreferences in the form of an ampersand
     (&) immediately followed by a digit referring to the group to be captured
@@ -1124,6 +1125,8 @@ def recode(
     last_recoded = False
     old_str_index = -1
     new_str_index = -1
+
+    total_num_subs = 0
 
     # For each input segment...
     for segment in segmentation:
@@ -1151,7 +1154,11 @@ def recode(
         if substitutions is not None:
             for substitution in substitutions:
                 repl_string = backref.sub(r'\\', substitution[1])
-                recoded_text = substitution[0].sub(repl_string, recoded_text)
+                recoded_text, num_subs = substitution[0].subn(
+                    repl_string,
+                    recoded_text,
+                )
+                total_num_subs += num_subs
 
         # If text was modified, create and store new Input...
         if recoded_text != original_text:
@@ -1190,7 +1197,7 @@ def recode(
 
     # If list of new objects contains a single Input, return it.
     if len(new_objects) == 1 and isinstance(new_objects[0], Input):
-        return new_objects[0]
+        return new_objects[0], total_num_subs
     # Otherwise return a new segmentation with the segments in the list
     # (including those contained in Input objects).
     # else:
@@ -1200,7 +1207,7 @@ def recode(
             new_segmentation.append(new_object[0])
         else:
             new_segmentation.append(new_object)
-    return new_segmentation
+    return new_segmentation, total_num_subs
 
 
 def bypass(segmentation, label='bypassed_data'):

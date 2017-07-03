@@ -37,14 +37,19 @@ from __future__ import unicode_literals
 from future.utils import iteritems, itervalues
 from builtins import range, chr
 
-import random, math, functools
+import random, math
+
+try:
+    from functools import lru_cache
+except ImportError:
+    from backports.functools_lru_cache import lru_cache
 
 from scipy.misc import comb as binom
 
 from .Segmentation import Segmentation
 from .Segment import Segment
 
-__version__ = "1.0.3"
+__version__ = "1.0.4"
 
 
 def iround(x):
@@ -142,7 +147,7 @@ def get_expected_subsample_variety(dictionary, subsample_size):
     return expected_variety
 
 
-@functools.lru_cache(maxsize=None)
+@lru_cache(maxsize=None)
 def _prob_no_occurrence(
         sample_size,
         subsample_size,

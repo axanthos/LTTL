@@ -41,7 +41,7 @@ from .Utils import (
     iround,
 )
 
-__version__ = "1.0.5"
+__version__ = "1.0.6"
 
 
 def count_in_context(
@@ -1321,6 +1321,7 @@ def variety_in_context(
     KEY                     VALUE                           DEFAULT
     annotation_key          annotation to be considered     None
     weighting               Bool                            False
+    adjust                  Bool                            True
 
     Parameter contexts is a dict with the following keys and values:
     KEY                     VALUE                           DEFAULT
@@ -1339,6 +1340,7 @@ def variety_in_context(
     default_categories = {
         'annotation_key': None,
         'weighting': False,
+        'adjust': True,
     }
     default_contexts = {
         'segmentation': None,
@@ -1389,16 +1391,16 @@ def variety_in_context(
             contexts,
             progress_callback,
         )
-        category_counts = count_in_context(
-            {
-                'segmentation': units['segmentation'],
-                'annotation_key': categories['annotation_key'],
-                'seq_length': units['seq_length'],
-            },
-            contexts,
-            progress_callback,
-        )
-        if apply_resampling:
+        if apply_resampling and categories['adjust']:
+            category_counts = count_in_context(
+                {
+                    'segmentation': units['segmentation'],
+                    'annotation_key': categories['annotation_key'],
+                    'seq_length': units['seq_length'],
+                },
+                contexts,
+                progress_callback,
+            )
             # Compute target lexematic diversity (for RMSP)...
             expected_varieties = list()
             for row_id in category_counts.row_ids:
@@ -1435,40 +1437,51 @@ def variety_in_context(
         if default_row_id is not None:
             row_id = default_row_id
         if apply_resampling:
+
             if measure_per_category:
 
-                # Find optimal subsample size (RMSP)...
-                cat_row = tuple_to_simple_dict(
-                    category_counts.values,
-                    row_id,
-                )
-                if subsample_size > sum(cat_row.values()):
-                    continue
-                size_low, size_high = 2, subsample_size
-                size_tmp = size_high
-                NLTTR_tmp = get_expected_subsample_variety(cat_row, size_tmp)  \
-                            / size_tmp
-                while(True):
-                    if NLTTR_tmp == target_NLTTR or size_low == size_high:
-                        break
-                    if size_high - size_low == 1:
-                        high = get_expected_subsample_variety(cat_row, size_high) \
-                                / size_high
-                        low = get_expected_subsample_variety(cat_row, size_low) \
-                                / size_low
-                        if high - target_NLTTR < target_NLTTR - low:
-                            size_tmp = size_high
-                        else:
-                            size_tmp = size_low
-                        break
-                    size_tmp = iround((size_low+size_high) / 2)
-                    NLTTR_tmp = get_expected_subsample_variety(cat_row, size_tmp)  \
-                                / size_tmp
-                    if NLTTR_tmp < target_NLTTR:
-                        size_high = size_tmp
-                    elif NLTTR_tmp > target_NLTTR:
-                        size_low = size_tmp
-
+                if categories["adjust"]:
+                    # Find optimal subsample size (RMSP)...
+                    cat_row = tuple_to_simple_dict(
+                        category_counts.values,
+                        row_id,
+                    )
+                    if subsample_size > sum(cat_row.values()):
+                        continue
+                    size_low, size_high = 2, subsample_size
+                    size_tmp = size_high
+                    NLTTR_tmp = get_expected_subsample_variety(
+                        cat_row,
+                        size_tmp,
+                    ) / size_tmp
+                    while(True):
+                        if NLTTR_tmp == target_NLTTR or size_low == size_high:
+                            break
+                        if size_high - size_low == 1:
+                            high = get_expected_subsample_variety(
+                                cat_row,
+                                size_high,
+                            ) / size_high
+                            low = get_expected_subsample_variety(
+                                cat_row,
+                                size_low,
+                            ) / size_low
+                            if high - target_NLTTR < target_NLTTR - low:
+                                size_tmp = size_high
+                            else:
+                                size_tmp = size_low
+                            break
+                        size_tmp = iround((size_low+size_high) / 2)
+                        NLTTR_tmp = get_expected_subsample_variety(
+                            cat_row,
+                            size_tmp,
+                        ) / size_tmp
+                        if NLTTR_tmp < target_NLTTR:
+                            size_high = size_tmp
+                        elif NLTTR_tmp > target_NLTTR:
+                            size_low = size_tmp
+                else:
+                    size_tmp = subsample_size
                 varieties = list()
                 for i in range(num_subsamples):
                     try:
@@ -1483,15 +1496,39 @@ def variety_in_context(
                         )
                     except ValueError:
                         break
-                    if progress_callback:
-                        progress_callback()
                 if varieties:
                     (
                         new_values[(row_id, '__variety_average__')],
                         new_values[(row_id, '__variety_std_deviation__')],
                     ) = get_average(varieties)
-                    new_values[(row_id, '__subsample_size__')] = size_tmp
+                    if categories["adjust"]:
+                        new_values[(row_id, '__subsample_size__')] = size_tmp
                     new_values[(row_id, '__variety_count__')] = num_subsamples
+
+            elif units['weighting']:
+
+                varieties = list()
+                for i in range(num_subsamples):
+                    try:
+                        sampled_row = sample_dict(row, subsample_size)
+                        varieties.append(
+                            get_variety(
+                                sampled_row,
+                                unit_weighting=units['weighting'],
+                                category_weighting=categories['weighting'],
+                                category_delimiter=category_delimiter,
+                            )
+                        )
+                    except ValueError:
+                        break
+                if varieties:
+                    (
+                        new_values[(row_id, '__variety_average__')],
+                        new_values[(row_id, '__variety_std_deviation__')],
+                    ) = get_average(varieties)
+                    new_values[(row_id, '__variety_count__')] = num_subsamples
+
+
             else:
                 try:
                     new_values[(row_id, '__expected_variety__')]    \
@@ -1516,9 +1553,17 @@ def variety_in_context(
             new_col_ids = [
                 '__variety_average__',
                 '__variety_std_deviation__',
-                '__subsample_size__',
+            ]
+            if categories["adjust"]:
+                new_col_ids.append('__subsample_size__')
+            new_col_ids.append('__variety_count__')
+        elif units['weighting']:
+            new_col_ids = [
+                '__variety_average__',
+                '__variety_std_deviation__',
                 '__variety_count__',
             ]
+
         else:
             new_col_ids = ['__expected_variety__']
     else:
@@ -1564,6 +1609,7 @@ def variety_in_window(
     KEY                     VALUE                           DEFAULT
     annotation_key          annotation to be considered     None
     weighting               Bool                            False
+    adjust                  Bool                            True
 
     Returns a Table.
     """
@@ -1577,6 +1623,7 @@ def variety_in_window(
     default_categories = {
         'annotation_key': None,
         'weighting': False,
+        'adjust': True,
     }
     if units is not None:
         default_units.update(units)
@@ -1584,6 +1631,9 @@ def variety_in_window(
     if categories is not None:
         default_categories.update(categories)
     categories = default_categories
+
+    # Inititalize target lexematic diversity (for RMSP computation).
+    target_NLTTR = 0
 
     # If categories are specified...
     if measure_per_category:
@@ -1616,6 +1666,28 @@ def variety_in_window(
             window_size,
             progress_callback,
         )
+        if apply_resampling and categories['adjust']:
+            category_counts = count_in_window(
+                {
+                    'segmentation': units['segmentation'],
+                    'annotation_key': categories['annotation_key'],
+                    'seq_length': units['seq_length'],
+                },
+                window_size,
+                progress_callback,
+            )
+            # Compute target lexematic diversity (for RMSP)...
+            expected_varieties = list()
+            for row_id in category_counts.row_ids:
+                row = tuple_to_simple_dict(category_counts.values, row_id)
+                try:
+                    expected_varieties.append(
+                        get_expected_subsample_variety(row, subsample_size)
+                    )
+                except ValueError:
+                    pass
+            if expected_varieties:
+                target_NLTTR = max(expected_varieties) / subsample_size
 
     # Else if categories are not specified...
     else:
@@ -1631,26 +1703,103 @@ def variety_in_window(
     for row_id in counts.row_ids:
         row = tuple_to_simple_dict(counts.values, row_id)
         if apply_resampling:
-            varieties = list()
-            for i in range(num_subsamples):
+            if measure_per_category:
+
+                if categories["adjust"]:
+                    # Find optimal subsample size (RMSP)...
+                    cat_row = tuple_to_simple_dict(
+                        category_counts.values,
+                        row_id,
+                    )
+                    if subsample_size > sum(cat_row.values()):
+                        continue
+                    size_low, size_high = 2, subsample_size
+                    size_tmp = size_high
+                    NLTTR_tmp = get_expected_subsample_variety(
+                        cat_row,
+                        size_tmp,
+                    ) / size_tmp
+                    while(True):
+                        if NLTTR_tmp == target_NLTTR or size_low == size_high:
+                            break
+                        if size_high - size_low == 1:
+                            high = get_expected_subsample_variety(
+                                cat_row,
+                                size_high,
+                            ) / size_high
+                            low = get_expected_subsample_variety(
+                                cat_row,
+                                size_low,
+                            ) / size_low
+                            if high - target_NLTTR < target_NLTTR - low:
+                                size_tmp = size_high
+                            else:
+                                size_tmp = size_low
+                            break
+                        size_tmp = iround((size_low+size_high) / 2)
+                        NLTTR_tmp = get_expected_subsample_variety(
+                            cat_row,
+                            size_tmp,
+                        ) / size_tmp
+                        if NLTTR_tmp < target_NLTTR:
+                            size_high = size_tmp
+                        elif NLTTR_tmp > target_NLTTR:
+                            size_low = size_tmp
+                else:
+                    size_tmp = subsample_size
+
+                varieties = list()
+                for i in range(num_subsamples):
+                    try:
+                        sampled_row = sample_dict(row, size_tmp)
+                        varieties.append(
+                            get_variety(
+                                sampled_row,
+                                unit_weighting=units['weighting'],
+                                category_weighting=categories['weighting'],
+                                category_delimiter=category_delimiter,
+                            )
+                        )
+                    except ValueError:
+                        break
+                if varieties:
+                    (
+                        new_values[(row_id, '__variety_average__')],
+                        new_values[(row_id, '__variety_std_deviation__')],
+                    ) = get_average(varieties)
+                    new_values[(row_id, '__subsample_size__')] = size_tmp
+                    new_values[(row_id, '__variety_count__')] = num_subsamples
+
+            elif units['weighting']:
+
+                varieties = list()
+                for i in range(num_subsamples):
+                    try:
+                        sampled_row = sample_dict(row, subsample_size)
+                        varieties.append(
+                            get_variety(
+                                sampled_row,
+                                unit_weighting=units['weighting'],
+                                category_weighting=categories['weighting'],
+                                category_delimiter=category_delimiter,
+                            )
+                        )
+                    except ValueError:
+                        break
+                if varieties:
+                    (
+                        new_values[(row_id, '__variety_average__')],
+                        new_values[(row_id, '__variety_std_deviation__')],
+                    ) = get_average(varieties)
+                    new_values[(row_id, '__variety_count__')] = num_subsamples
+
+
+            else:
                 try:
-                    sampled_row = sample_dict(row, subsample_size)
-                    varieties.append(get_variety(
-                        sampled_row,
-                        unit_weighting=units['weighting'],
-                        category_weighting=categories['weighting'],
-                        category_delimiter=category_delimiter,
-                    ))
+                    new_values[(row_id, '__expected_variety__')]    \
+                        = get_expected_subsample_variety(row, subsample_size)
                 except ValueError:
-                    break
-                if progress_callback:
-                    progress_callback()
-            if varieties:
-                (
-                    new_values[(row_id, '__variety_average__')],
-                    new_values[(row_id, '__variety_std_deviation__')],
-                ) = get_average(varieties)
-                new_values[(row_id, '__variety_count__')] = num_subsamples
+                    pass
         else:
             new_values[(row_id, '__variety__')] = get_variety(
                 row,
@@ -1662,11 +1811,22 @@ def variety_in_window(
             progress_callback()
 
     if apply_resampling:
-        new_col_ids = [
-            '__variety_average__',
-            '__variety_std_deviation__',
-            '__variety_count__',
-        ]
+        if measure_per_category:
+            new_col_ids = [
+                '__variety_average__',
+                '__variety_std_deviation__',
+                '__subsample_size__',
+                '__variety_count__',
+            ]
+        elif units['weighting']:
+            new_col_ids = [
+                '__variety_average__',
+                '__variety_std_deviation__',
+                '__variety_count__',
+            ]
+
+        else:
+            new_col_ids = ['__expected_variety__']
     else:
         new_col_ids = ['__variety__']
 
