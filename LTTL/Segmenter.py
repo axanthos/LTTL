@@ -45,7 +45,7 @@ from builtins import range
 from builtins import str as text
 from builtins import dict
 
-__version__ = "1.0.5"
+__version__ = "1.0.6"
 
 
 def concatenate(
@@ -1296,8 +1296,14 @@ def _parse_xml_tag(tag):
     - attributes:   a dict with a key-value pair for each xml attribute
     If parsing fails somehow, return value is None.
     """
-    element_regex = re.compile(r'(\w+)', re.U)
-    attribute_regex = re.compile(r'''(\w+)\s*=\s*(['"])(.+?)(?<!\\)\2''', re.U)
+    element_regex = re.compile(
+        r'((:|[^\W\d])([\w.:-])*)',
+        re.U
+    )
+    attribute_regex = re.compile(
+        r'''((:|[^\W\d])([\w.:-])*)\s*=\s*(['"])(.+?)(?<!\\)\4''',
+        re.U
+    )
     tag_description = {
         'is_element': False,
         'is_opening': False,
@@ -1312,7 +1318,7 @@ def _parse_xml_tag(tag):
         tag_description['is_element'] = True
         tag_description['element'] = elem.group(1)
         for attr in re.finditer(attribute_regex, tag):
-            tag_description['attributes'][attr.group(1)] = attr.group(3)
+            tag_description['attributes'][attr.group(1)] = attr.group(5)
         if tag[1] != '/':
             tag_description['is_opening'] = True
         if tag[-2] == '/':

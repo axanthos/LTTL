@@ -271,7 +271,7 @@ class TestSegment(unittest.TestCase):
 
     def test_get_real_str_index_recoded(self):
         """Does get_real_str_index() work with actual str index?"""
-        recoded_seg = Segmenter.recode(
+        recoded_seg, _ = Segmenter.recode(
             self.char_seg,
             substitutions=[(re.compile(r'[bd]'), 'f')],
         )

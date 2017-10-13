@@ -1244,7 +1244,7 @@ class TestSegmenter(unittest.TestCase):
 
     def test_recode_single_input(self):
         """Does recode return a single Input object when needed?"""
-        segmentation = Segmenter.recode(
+        segmentation, _ = Segmenter.recode(
             self.entire_text_seg,
             case='upper',
         )
@@ -1255,7 +1255,7 @@ class TestSegmenter(unittest.TestCase):
 
     def test_recode_no_change(self):
         """Does recode return a Segmentation when no change is made?"""
-        segmentation = Segmenter.recode(
+        segmentation, _ = Segmenter.recode(
             self.entire_text_seg,
         )
         self.assertTrue(
@@ -1265,7 +1265,7 @@ class TestSegmenter(unittest.TestCase):
 
     def test_recode_segmentation_as_input(self):
         """Does recode return a Segmentation when input is one?"""
-        segmentation = Segmenter.recode(
+        segmentation, _ = Segmenter.recode(
             self.letter_seg,
             case='upper',
         )
@@ -1286,7 +1286,7 @@ class TestSegmenter(unittest.TestCase):
 
     def test_recode_upper_case(self):
         """Does recode change case to upper?"""
-        segmentation = Segmenter.recode(
+        segmentation, _ = Segmenter.recode(
             self.word_seg,
             case='upper',
         )
@@ -1298,7 +1298,7 @@ class TestSegmenter(unittest.TestCase):
 
     def test_recode_lower_case(self):
         """Does recode change case to lower?"""
-        segmentation = Segmenter.recode(
+        segmentation, _ = Segmenter.recode(
             self.second_word_seg,
             case='lower',
         )
@@ -1310,7 +1310,7 @@ class TestSegmenter(unittest.TestCase):
 
     def test_recode_remove_accents(self):
         """Does recode remove accents?"""
-        segmentation = Segmenter.recode(
+        segmentation, _ = Segmenter.recode(
             self.second_word_seg,
             remove_accents=True,
         )
@@ -1322,7 +1322,7 @@ class TestSegmenter(unittest.TestCase):
 
     def test_recode_substitutions(self):
         """Does recode apply substitutions?"""
-        segmentation = Segmenter.recode(
+        segmentation, _ = Segmenter.recode(
             self.word_seg,
             substitutions=[
                 (re.compile(r'..'), 'x'),
@@ -1337,7 +1337,7 @@ class TestSegmenter(unittest.TestCase):
 
     def test_recode_substitutions_after(self):
         """Does recode apply substitutions after preprocessing?"""
-        segmentation = Segmenter.recode(
+        segmentation, _ = Segmenter.recode(
             self.word_seg,
             case='upper',
             substitutions=[
@@ -1353,7 +1353,7 @@ class TestSegmenter(unittest.TestCase):
 
     def test_recode_variable_interpolation(self):
         """Does recode interpolate variables for substitutions?"""
-        segmentation = Segmenter.recode(
+        segmentation, _ = Segmenter.recode(
             self.word_seg,
             substitutions=[
                 (re.compile(r'(.)(.)'), '&2&1'),
@@ -1367,7 +1367,7 @@ class TestSegmenter(unittest.TestCase):
 
     def test_recode_copy_annotations(self):
         """Does recode copy annotations?"""
-        segmentation = Segmenter.recode(
+        segmentation, _ = Segmenter.recode(
             self.word_seg,
             substitutions=[
                 (re.compile(r'.'), 'test'),
@@ -1382,7 +1382,7 @@ class TestSegmenter(unittest.TestCase):
 
     def test_recode_copy_annotations_false(self):
         """Does recode skip copying annotations?"""
-        segmentation = Segmenter.recode(
+        segmentation, _ = Segmenter.recode(
             self.word_seg,
             substitutions=[
                 (re.compile(r'.'), 'test'),
