@@ -28,10 +28,9 @@ from os import path
 
 __version__ = "1.0.19"
 
-here = path.abspath(path.dirname(__file__))
-
-with open(path.join(here, 'README.rst'), encoding='utf-8') as f:
-    long_description = f.read()
+LONG_DESCRIPTION = open(
+    path.join(path.dirname(__file__), 'README.rst')
+).read()
 
 package_version = '2.0.7'
 url = 'https://github.com/axanthos/LTTL/tarball/v' + package_version
@@ -42,7 +41,7 @@ setup(
     version=package_version,
 
     description='LangTech Text Library (LTTL) for text processing and analysis',
-    long_description=long_description,
+    long_description=LONG_DESCRIPTION,
 
     # The project's main homepage.
     url='https://github.com/axanthos/LTTL',
@@ -76,6 +75,7 @@ setup(
     install_requires=[
         'setuptools',
         'numpy',
+        'scipy',
         'future',
         'backports.functools_lru_cache',
     ],
