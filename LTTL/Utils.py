@@ -1,5 +1,5 @@
 """Module Utils.py
-Copyright 2012-2016 LangTech Sarl (info@langtech.ch)
+Copyright 2012-2019 LangTech Sarl (info@langtech.ch)
 ---------------------------------------------------------------------------
 This file is part of the LTTL package v2.0.
 
@@ -44,12 +44,16 @@ try:
 except ImportError:
     from backports.functools_lru_cache import lru_cache
 
-from scipy.misc import comb as binom
+try:
+    from scipy.special import comb as binom
+except ImportError:
+    from scipy.misc import comb as binom
+   
 
 from .Segmentation import Segmentation
 from .Segment import Segment
 
-__version__ = "1.0.4"
+__version__ = "1.0.5"
 
 
 def iround(x):
