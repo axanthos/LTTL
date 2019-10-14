@@ -27,6 +27,8 @@ from math import sqrt
 from builtins import range
 from builtins import str as text
 
+import numpy as np
+
 from .Segmentation import Segmentation
 from .Table import *
 from .Utils import (
@@ -769,7 +771,7 @@ def length_in_context(
         if contexts['merge']:
 
             # Set default context type.
-            context_type = '__global__'
+            context_types = ['__global__']
 
         # Else get the list of contexts in final format...
         else:
@@ -790,185 +792,64 @@ def length_in_context(
         # CASE 1A: averaging units are specified...
         if averaging['segmentation'] is not None:
 
-            # Optimization...
-            averaging_segmentation = averaging['segmentation']
-            averaging_std_deviation = averaging['std_deviation']
+            lengths = dict()
+            
+            # Loop over context token indices...
+            for context_index, context_segment in enumerate(
+                contexts['segmentation']
+            ):
 
-            # CASE 1A.i: Standard deviation should be computed...
-            if averaging_std_deviation:
+                # Get context token...
+                context_token = context_segment
 
-                stats = dict()
-
-                # online variance/mean computation with Welford's algorithm
-                # https://en.wikipedia.org/wiki/Algorithms_for_calculating_variance
-
-                # Initialize lengths if contexts should be merged...
+                # Get and store context type...
                 if contexts['merge']:
-                    stats[context_type] = [0, 0.0, 0.0]
-
-                # Loop over context token indices...
-                for context_index, context_segment in enumerate(
-                        contexts['segmentation']):
-
-                    # Get context token...
-                    context_token = context_segment
-
-                    # Get and store context type...
-                    if not contexts['merge']:
-                        context_type = context_list[context_index]
-                        if context_type not in context_types:
-                            context_types.append(context_type)
-                            stats[context_type] = [0, 0.0, 0.0]
-
-                    # Loop over contained averaging units...
-                    for averaging_unit in \
-                            context_token.get_contained_segments(
-                                averaging_segmentation
-                            ):
-                        x = len(averaging_unit.get_contained_segments(units))
-                        # (Welford's algorithm)
-                        n, mean, M2 = stats[context_type]
-                        stats[context_type][0] = n + 1
-                        delta = x - mean
-                        mean += delta / (n + 1)
-                        stats[context_type][1] = mean
-                        stats[context_type][2] = M2 + delta * (x - mean)
-
-                    if progress_callback:
-                        progress_callback()
-
-                # If contexts should be merged...
-                if contexts['merge']:
-
-                    # Get number, average length and stdev...
-                    nbr = stats[context_type][0]
-                    average = stats[context_type][1]
-                    if n < 2:
-                        stdev = float('nan')
-                    else:
-                        stdev = sqrt(stats[context_type][2] / (
-                        stats[context_type][0] - 1))
-
-                    values[(context_type, '__length_average__')] = average
-                    values[
-                        (context_type, '__length_std_deviation__')
-                    ] = stdev
-                    values[(context_type, '__length_count__')] = nbr
-
-                # Otherwise loop over context types...
+                    context_type = '__global__'
                 else:
+                    context_type = context_list[context_index]
+                    if context_type not in context_types:
+                        context_types.append(context_type)
 
-                    for context_type in context_types:
+                # Get averaging units for this context token...
+                averaging_units = context_token.get_contained_segments(
+                    averaging['segmentation']
+                )
 
-                        # Get number, average length and stdev for this type...
-                        nbr = stats[context_type][0]
-                        average = stats[context_type][1]
-                        if nbr < 2:
-                            stdev = float('nan')
-                        else:
-                            stdev = sqrt(stats[context_type][2] / (
-                                stats[context_type][0] - 1)
-                            )
+                # Get lengths for these averaging units and store with type...
+                my_lengths = [
+                    len(averaging_unit.get_contained_segments(units))
+                    for averaging_unit in averaging_units
+                ]              
+                try:
+                    lengths[context_type].extend(my_lengths)
+                except KeyError:
+                    lengths[context_type] = my_lengths
+                    
+                if progress_callback:
+                    progress_callback()
+            print(lengths)
+            # Loop over context types...
+            for context_type in context_types:
 
-                        values[(context_type, '__length_average__')] = average
-                        values[
-                            (context_type, '__length_std_deviation__')
-                        ] = stdev
-                        values[(context_type, '__length_count__')] = nbr
+                # Store average and count for this context...
+                values[context_type, '__length_average__'] = np.mean(
+                    lengths[context_type]
+                )
+                values[context_type, '__length_count__'] = len(
+                    lengths[context_type]
+                )
 
-            # CASE 1A.ii: Standard deviation need not be computed...
-            else:
-
-                num_averaging_units = dict()
-                num_units = dict()
-
-                # Initialize counts if contexts should be merged...
-                if contexts['merge']:
-                    num_averaging_units[context_type] = 0
-                    num_units[context_type] = 0
-
-                # Loop over context token indices...
-                for context_index, context_segment in enumerate(
-                        contexts['segmentation']):
-
-                    # Get context token...
-                    context_token = context_segment
-
-                    # Get and store context type...
-                    if not contexts['merge']:
-                        context_type = context_list[context_index]
-                        if context_type not in context_types:
-                            context_types.append(context_type)
-                            num_averaging_units[context_type] = 0
-                            num_units[context_type] = 0
-
-                    # Get number of averaging units for this context...
-                    num_averaging_units[context_type] += len(
-                        context_token.get_contained_segments(
-                            averaging_segmentation
-                        )
-                    )
-
-                    # Get number of units for this context...
-                    num_units[context_type] += len(
-                        context_token.get_contained_segments(units)
-                    )
-
-                    if progress_callback:
-                        progress_callback()
-
-                # If contexts should be merged...
-                if contexts['merge']:
-
-                    # Store average and count...
-                    try:
-                        average_length = (
-                            num_units[context_type] /
-                            num_averaging_units[context_type]
-                        )
-                        if average_length < 1:
-                            average_length = 0.0
-                        values[
-                            (context_type, '__length_average__')
-                        ] = average_length
-                        values[
-                            (context_type, '__length_count__')
-                        ] = num_averaging_units[context_type]
-                    except ZeroDivisionError:
-                        pass
-
-                # Otherwise loop over context types...
-                else:
-
-                    for context_type in context_types:
-
-                        # Store average and count for this context...
-                        try:
-                            average_length = (
-                                num_units[context_type] /
-                                num_averaging_units[context_type]
-                            )
-                            if average_length < 1:
-                                average_length = 0.0
-                            values[
-                                (context_type, '__length_average__')
-                            ] = average_length
-                            values[
-                                (context_type, '__length_count__')
-                            ] = num_averaging_units[context_type]
-                        except ZeroDivisionError:
-                            pass
+                # If standard deviation should be computed...
+                if averaging['std_deviation']:
+                    values[context_type, '__length_std_deviation__'] =    \
+                        np.std(lengths[context_type])
 
             # Store col ids...
             if len(values) > 0:
                 col_ids.append('__length_average__')
-                if averaging_std_deviation:
-                    col_ids.append('__length_std_deviation__')
                 col_ids.append('__length_count__')
-
-            # Store default context type if needed...
-            if len(values) > 0 and len(context_types) == 0:
-                context_types.append(context_type)
+                if averaging['std_deviation']:
+                    col_ids.append('__length_std_deviation__')
 
         # CASE 1B: no averaging units are specified...
         else:
@@ -1010,57 +891,25 @@ def length_in_context(
             context_type = '__global__'
             context_types.append(context_type)
 
-            # CASE 2A.i: Standard deviation should be computed...
+            lengths = [
+                len(averaging_unit.get_contained_segments(units))
+                for averaging_unit in averaging['segmentation']
+            ]
+            
+            values[context_type, '__length_average__'] = np.mean(lengths)
+            values[context_type, '__length_count__'] = len(lengths)
+            
+            # If standard deviation should be computed...
             if averaging['std_deviation']:
-
-                # (Welford's algorithm)
-                n = 0
-                mean = 0.0
-                M2 = 0.0
-
-                for averaging_unit in averaging['segmentation']:
-                    x = len(averaging_unit.get_contained_segments(units))
-                    n += 1
-                    delta = x - mean
-                    mean += delta / n
-                    M2 += delta * (x - mean)
-
-                # Get stdev for this context...
-                if n < 2:
-                    stdev = float('nan')
-                else:
-                    stdev = sqrt(M2 / (n - 1))
-
-                values[(context_type, '__length_average__')] = mean
-                values[(context_type, '__length_std_deviation__')] = stdev
-                values[(context_type, '__length_count__')] = n
-
-            # CASE 2A.ii: Standard deviation need not be computed...
-            else:
-
-                # Get number of averaging units...
-                num_averaging_units = len(averaging['segmentation'])
-
-                # Store average and count...
-                try:
-                    average_length = len(units) / num_averaging_units
-                    if average_length < 1:
-                        average_length = 0.0
-                    values[
-                        (context_type, '__length_average__')
-                    ] = average_length
-                    values[
-                        (context_type, '__length_count__')
-                    ] = num_averaging_units
-                except ZeroDivisionError:
-                    pass
+                values[context_type, '__length_std_deviation__'] =    \
+                    np.std(lengths)
 
             # Store col ids...
             if len(values) > 0:
                 col_ids.append('__length_average__')
+                col_ids.append('__length_count__')
                 if averaging['std_deviation']:
                     col_ids.append('__length_std_deviation__')
-                col_ids.append('__length_count__')
 
         # CASE 2B: no averaging units are specified...
         else:
