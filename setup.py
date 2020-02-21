@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 
 """File setup.py
-Copyright 2012-2019 LangTech Sarl (info@langtech.ch)
+Copyright 2012-2020 LangTech Sarl (info@langtech.ch)
 ---------------------------------------------------------------------------
 This file is part of the LTTL package v2.0.
 
@@ -26,13 +26,13 @@ from setuptools import setup, find_packages
 from codecs import open
 from os import path
 
-__version__ = "1.0.20"
+__version__ = "1.0.21"
 
 LONG_DESCRIPTION = open(
     path.join(path.dirname(__file__), 'README.rst')
 ).read()
 
-package_version = '2.0.8'
+package_version = '2.0.9'
 url = 'https://github.com/axanthos/LTTL/tarball/v' + package_version
 
 setup(

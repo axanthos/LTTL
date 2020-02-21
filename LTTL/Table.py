@@ -1,5 +1,5 @@
 """Module Table.py
-Copyright 2012-2016 LangTech Sarl (info@langtech.ch)
+Copyright 2012-2020 LangTech Sarl (info@langtech.ch)
 ---------------------------------------------------------------------------
 This file is part of the LTTL package v2.0.
 
@@ -42,7 +42,7 @@ from builtins import str as text
 from future.utils import iteritems
 from past.builtins import xrange
 
-__version__ = "1.0.4"
+__version__ = "1.0.5"
 
 
 class Table(object):
@@ -266,8 +266,6 @@ class Table(object):
 
             # Create Orange 3 domain and table
             domain = Orange.data.Domain(attr_vars, class_vars, meta_vars)
-            orange_table = Orange.data.Table(domain)
-
             if self.missing is not None:
                 missing = text(self.missing)
             else:
@@ -292,7 +290,7 @@ class Table(object):
                         value = missing
                     row_data.append(value)
                 rows.append(Orange.data.Instance(domain, row_data))
-            orange_table.extend(rows)
+            orange_table = Orange.data.Table.from_list(domain, rows)
 
             return orange_table
     else:
