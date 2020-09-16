@@ -32,7 +32,7 @@ LONG_DESCRIPTION = open(
     path.join(path.dirname(__file__), 'README.rst')
 ).read()
 
-package_version = '2.0.10'
+package_version = '2.0.11'
 url = 'https://github.com/axanthos/LTTL/tarball/v' + package_version
 
 setup(
