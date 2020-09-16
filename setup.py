@@ -26,7 +26,7 @@ from setuptools import setup, find_packages
 from codecs import open
 from os import path
 
-__version__ = "1.0.22"
+__version__ = "1.0.23"
 
 LONG_DESCRIPTION = open(
     path.join(path.dirname(__file__), 'README.rst')
