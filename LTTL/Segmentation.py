@@ -30,7 +30,7 @@ import os
 from tempfile import NamedTemporaryFile
 from collections import deque
 
-__version__ = "1.0.3"
+__version__ = "1.0.4"
 
 # segmentation with more segments will have
 # their string representation summarized
@@ -722,7 +722,7 @@ class Segmentation(object):
                 list(segment.annotations)
             )
 
-        return list(annotation_keys)
+        return sorted(list(annotation_keys))
 
     def is_non_overlapping(self):
         """Determine if there is no segment overlap"""
