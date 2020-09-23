@@ -30,7 +30,7 @@ import os
 from tempfile import NamedTemporaryFile
 from collections import deque
 
-__version__ = "1.0.4"
+__version__ = "1.0.5"
 
 # segmentation with more segments will have
 # their string representation summarized
@@ -616,7 +616,7 @@ class Segmentation(object):
 
         # Summarize?
         if display_all is None:
-            display_all = len(self) < MAX_SEGMENT_STRING
+            display_all = len(self) <= MAX_SEGMENT_STRING
 
         # Add (or not) a 1-unit offset to make addresses more readable.
         offset = 1 if humanize_addresses else 0
