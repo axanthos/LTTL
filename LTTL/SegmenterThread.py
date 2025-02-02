@@ -39,16 +39,16 @@ import unicodedata
 from .Segmentation import Segmentation
 from .Segment import Segment
 from .Input import Input
-from .Utils import iround
+from .Utils import iround, update_progress_bar
 
 from builtins import range
 from builtins import str as text
 from builtins import dict
 
-__version__ = "1.0.7"
-
+__version__ = "1.0.0"
 
 def concatenate(
+    caller,
     segmentations,
     label='my_concatenation',
     copy_annotations=True,
@@ -56,7 +56,6 @@ def concatenate(
     sort=False,
     auto_number_as=None,
     merge_duplicates=False,
-    progress_callback=None,
 ):
     """Take a list of segmentations and concatenates them into a new one
 
@@ -101,6 +100,11 @@ def concatenate(
     # Sort output segment list if needed...
     if sort:
         str_indices = sorted(str_indices)
+
+    # AS 10.2023
+    # Track progress
+    max_itr = sum([len(s) for s in segmentations]) # Maximum iterations
+    cur_itr = 1                                    # Current iteration
 
     # For each str_index...
     for index in str_indices:
@@ -175,26 +179,45 @@ def concatenate(
 
             last_seen = segment
 
-            if progress_callback:
-                progress_callback()
+            # AS 10.2023
+            # End thread if requested by user
+            if caller.cancel_operation:
+                caller.signal_prog.emit(100, False)
+                return
+            
+            # AS 10.2023
+            # Update progress bar
+            cur_itr = update_progress_bar(caller, max_itr, cur_itr)
 
     # Auto-number if needed...
+    auto_number_return = 0
     if auto_number_as is not None and len(auto_number_as) > 0:
-        _auto_number(new_segments, auto_number_as)
+        # AS 10.2023
+        # Infobox for user
+        caller.signal_text.emit(u'Step 2/2: Post-processing (auto-number)...', 'warning')
+        caller.signal_prog.emit(1, True) # Reset progress and re-init it
+    
+        auto_number_return = _auto_number(new_segments, auto_number_as, caller)
+
+    # AS 09.2023
+    # Check if operation was cancelled
+    if auto_number_return == -1:
+        caller.signal_prog.emit(100, False) # Emit finished
+        return
 
     return new_segments
-
 
 # TODO: verify impact of changing default value of merge_duplicate to False
 # TODO: verify impact of sorting new segments outside of regex loop
 def tokenize(
     segmentation,
     regexes,
+    caller,
     label='segmented_data',
     import_annotations=True,
     merge_duplicates=False,
     auto_number_as=None,
-    progress_callback=None,
+    total_steps=1
 ):
     """Tokenize the segments of an existing segmentation using regexes and
     create a new segmentation with the resulting tokens
@@ -221,9 +244,6 @@ def tokenize(
     :param auto_number_as: unless set to None (default), a string indicating
     the annotation key which should be used for storing an automatically
     generated numeric index for each segment
-
-    :param progress_callback: callback for monitoring progress ticks (number of
-    input segments)
 
     :return: new segmentation containing the tokenized segments
 
@@ -292,6 +312,18 @@ def tokenize(
             annotation_key_format.append(None)
             annotation_value_format.append(None)
 
+    # AS 09.2023
+    # Emit arbitrary 1% progression ; only useful for user
+    # to indicate the program is not stuck at 0...
+    caller.signal_prog.emit(1, False)
+    
+    # Keeps track of current step
+    current_step = 1
+
+    # Track progression of iterations (used for progress bar)
+    max_itr = len(segmentation) # Maximum amount of iterations
+    cur_itr = 1                 # Current iteration
+
     # For each input segment...
     for segment in segmentation:
         # Initializations...
@@ -315,6 +347,7 @@ def tokenize(
                 regex_annotations = old_segment_annotation_copy.copy()
             else:
                 regex_annotations = None
+
             # CASE 1: If regex has mode 'tokenize'...
             if regex[1] == 'tokenize':
 
@@ -368,6 +401,7 @@ def tokenize(
                         new_segment_annotations = regex_annotations.copy()
                     else:
                         new_segment_annotations = dict()
+                        
                     # Update annotations with the key-value pair prepared
                     # above, if any...
                     if key is not None and value is not None:
@@ -382,6 +416,12 @@ def tokenize(
                             new_segment_annotations
                         )
                     )
+                    
+                    # AS 09.2023
+                    # End thread if requested by user
+                    if caller.cancel_operation:
+                        caller.signal_prog.emit(100, False)
+                        return
 
             # CASE 2: If regex has mode 'split'...
             elif regex[1] == 'split':
@@ -420,6 +460,12 @@ def tokenize(
                         )
                     )
                     previous_end_pos = start + match.end()
+                    
+                    # AS 09.2023
+                    # End thread if requested by user
+                    if caller.cancel_operation:
+                        caller.signal_prog.emit(100, False)
+                        return
 
                 # If the last match is not at the end of the segment, create
                 # a last segment...
@@ -441,8 +487,9 @@ def tokenize(
                     'should be either "tokenize" or "split"'
                 )
 
-            if progress_callback:
-                progress_callback()
+            # AS 09.2023
+            # Update progress bar
+            cur_itr = update_progress_bar(caller, max_itr, cur_itr)
 
         # Sort segments...
         new_segments.sort(key=lambda s: (
@@ -455,18 +502,40 @@ def tokenize(
         new_segmentation.extend(new_segments)
 
     # Merge duplicate segments if needed...
+    
     if merge_duplicates:
-        new_segmentation = _merge_duplicate_segments(new_segmentation, False)
+        # AS 09.2023
+        current_step += 1
+        caller.signal_text.emit(f'Step {current_step}/{total_steps}: Post-processing (fuse duplicates)...', 'warning')
+        caller.signal_prog.emit(1, True) # Reset progress and re-init it
+        new_segmentation = _merge_duplicate_segments(new_segmentation, False, caller)
+        
+    # AS 09.2023
+    # Check if operation was cancelled
+    if new_segmentation == -1:
+        caller.signal_prog.emit(100, False) # Emit finished
+        return
 
     # Auto-number (if needed)...
+    auto_number_return = 0
     if auto_number_as is not None and len(auto_number_as) > 0:
-        _auto_number(new_segmentation, auto_number_as)
+        # AS 09.2023
+        current_step += 1
+        caller.signal_text.emit(f'Step {current_step}/{total_steps}: Post-processing (auto-number)...', 'warning')
+        caller.signal_prog.emit(1, True) # Reset progress and re-init it
+        auto_number_return = _auto_number(new_segmentation, auto_number_as, caller)
+        
+    # AS 09.2023
+    # Check if operation was cancelled
+    if auto_number_return == -1:
+        caller.signal_prog.emit(100, False) # Emit finished
+        return
 
     return new_segmentation
 
-
 # TODO: verify number of iterations in callers (cf. auto-numbering)
 def select(
+    caller,
     segmentation,
     regex,
     mode='include',
@@ -474,7 +543,6 @@ def select(
     label='selected_data',
     copy_annotations=True,
     auto_number_as=None,
-    progress_callback=None,
 ):
     """In-/exclude segments in a segmentation based on a regex
 
@@ -512,6 +580,11 @@ def select(
     new_segmentation = Segmentation(list(), label)
     neg_segmentation = Segmentation(list(), 'NEG_' + label)
 
+    # AS 10.2023
+    # Track progress
+    max_itr = len(segmentation) # Maximum interations
+    cur_itr = 1                 # Current iteration
+
     # For each input segment...
     for segment in segmentation:
 
@@ -536,19 +609,53 @@ def select(
         else:
             neg_segmentation.append(new_segment)
 
-        if progress_callback:
-            progress_callback()
+        # AS 10.2023
+        # Update progress bar
+        cur_itr = update_progress_bar(caller, max_itr, cur_itr)
 
-    # Auto-number if needed...
+        # AS 10.2023
+        # End thread if requested by user
+        if caller.cancel_operation:
+            caller.signal_prog.emit(100, False) # Emit finished
+            return 
+
+    # Auto-number (if needed)...
+    auto_number_return_new = 0
+    auto_number_return_neg = 0
+
     if auto_number_as is not None and len(auto_number_as) > 0:
-        _auto_number(new_segmentation, auto_number_as)
-        _auto_number(neg_segmentation, auto_number_as)
+        # AS 10.2023
+        # Update label text and reset progress bar
+        caller.signal_text.emit(f'Step 2/3: Post-processing (auto-number selected segments)...', 'warning')
+        caller.signal_prog.emit(1, True) # Reset progress and re-init it
+    
+        auto_number_return_new = _auto_number(new_segmentation, auto_number_as, caller)
+        
+        # AS 10.2023
+        # Check if operation was cancelled (new)
+        if auto_number_return_new == -1:
+            caller.signal_prog.emit(100, False) # Emit finished
+            return
+        
+        # AS 10.2023
+        # Update label text and reset progress bar
+        caller.signal_text.emit(f'Step 3/3: Post-processing (auto-number discarded segments)...', 'warning')
+        caller.signal_prog.emit(1, True) # Reset progress and re-init it
+        
+        auto_number_return_neg = _auto_number(neg_segmentation, auto_number_as, caller)
+        
+        # AS 10.2023
+        # Check if operation was cancelled (neg)
+        if auto_number_return_neg == -1:
+            caller.signal_prog.emit(100, False) # Emit finished
+            return
 
     return new_segmentation, neg_segmentation
 
 
 # TODO: verify number of iterations in callers (cf. auto-numbering)
 def threshold(
+    caller,
     segmentation,
     min_count=None,
     max_count=None,
@@ -556,7 +663,6 @@ def threshold(
     label='thresholded_data',
     copy_annotations=True,
     auto_number_as=None,
-    progress_callback=None,
 ):
     """Include segments in a segmentation based on min/max count
 
@@ -589,7 +695,7 @@ def threshold(
     the segments that have not been selected (the latter has the same label as
     the former, prefixed by 'NEG_')
     """
-
+    
     # Get numeric values for effectively not setting a minimum count (=0) or a
     # maximum count (=length of input segmentation)...
     if min_count is None:
@@ -619,6 +725,11 @@ def threshold(
     new_segmentation = Segmentation(list(), label)
     neg_segmentation = Segmentation(list(), 'NEG_' + label)
 
+    # AS 10.2023
+    # Track progress
+    max_itr = len(segmentation) # Maximum interations
+    cur_itr = 1                 # Current iteration
+
     # For each input segment...
     for segment in segmentation:
 
@@ -642,25 +753,57 @@ def threshold(
         else:
             neg_segmentation.append(new_segment)
 
-        if progress_callback:
-            progress_callback()
+        # AS 10.2023
+        # Update progress bar
+        cur_itr = update_progress_bar(caller, max_itr, cur_itr)
+
+        # AS 10.2023
+        # End thread if requested by user
+        if caller.cancel_operation:
+            caller.signal_prog.emit(100, False) # Emit finished
+            return 
 
     # Auto-number if needed...
+    auto_number_return_new = 0
+    auto_number_return_neg = 0
+
     if auto_number_as is not None and len(auto_number_as) > 0:
-        _auto_number(new_segmentation, auto_number_as)
-        _auto_number(neg_segmentation, auto_number_as)
+        # AS 10.2023
+        # Update label text and reset progress bar
+        caller.signal_text.emit(f'Step 2/3: Post-processing (auto-number selected segments)...', 'warning')
+        caller.signal_prog.emit(1, True) # Reset progress and re-init it
+        
+        auto_number_return_new = _auto_number(new_segmentation, auto_number_as, caller)
+
+        # AS 10.2023
+        # Check if operation was cancelled (new)
+        if auto_number_return_new == -1:
+            caller.signal_prog.emit(100, False) # Emit finished
+            return
+
+        # AS 10.2023
+        # Update label text and reset progress bar
+        caller.signal_text.emit(f'Step 3/3: Post-processing (auto-number discarded segments)...', 'warning')
+        caller.signal_prog.emit(1, True) # Reset progress and re-init it
+        
+        auto_number_return_neg = _auto_number(neg_segmentation, auto_number_as, caller)
+
+        # AS 10.2023
+        # Check if operation was cancelled (neg)
+        if auto_number_return_neg == -1:
+            caller.signal_prog.emit(100, False) # Emit finished
+            return
 
     return new_segmentation, neg_segmentation
 
-
 def sample(
+    caller,
     segmentation,
     sample_size,
     mode='random',
     label='sampled_data',
     copy_annotations=True,
     auto_number_as=None,
-    progress_callback=None,
 ):
     """Draw a sample from a segmentation
 
@@ -711,6 +854,11 @@ def sample(
             'Unknown sampling mode "' + mode + '", ' +
             'should be either "random" or "systematic"'
         )
+        
+    # AS 10.2023
+    # Track progress
+    max_itr = len(segmentation) # Maximum interations
+    cur_itr = 1                 # Current iteration
 
     # For each sampled segment...
     for index, segment in enumerate(segmentation):
@@ -725,19 +873,52 @@ def sample(
         else:
             neg_segmentation.append(new_segment)
 
-        if progress_callback:
-            progress_callback()
+        # AS 10.2023
+        # Update progress bar
+        cur_itr = update_progress_bar(caller, max_itr, cur_itr)
 
-    # Auto-number if needed...
+        # AS 10.2023
+        # End thread if requested by user
+        if caller.cancel_operation:
+            caller.signal_prog.emit(100, False) # Emit finished
+            return
+
+    # Auto-number (if needed)...
+    auto_number_return_new = 0
+    auto_number_return_neg = 0
+
     if auto_number_as is not None and len(auto_number_as) > 0:
-        _auto_number(new_segmentation, auto_number_as)
-        _auto_number(neg_segmentation, auto_number_as)
+        # AS 10.2023
+        # Update label text and reset progress bar
+        caller.signal_text.emit(f'Step 2/3: Post-processing (auto-number selected segments)...', 'warning')
+        caller.signal_prog.emit(1, True) # Reset progress and re-init it
+
+        auto_number_return_new = _auto_number(new_segmentation, auto_number_as, caller)
+
+        # AS 10.2023
+        # Check if operation was cancelled (new)
+        if auto_number_return_new == -1:
+            caller.signal_prog.emit(100, False) # Emit finished
+            return
+
+        # AS 10.2023
+        # Update label text and reset progress bar
+        caller.signal_text.emit(f'Step 3/3: Post-processing (auto-number discarded segments)...', 'warning')
+        caller.signal_prog.emit(1, True) # Reset progress and re-init it
+
+        auto_number_return_neg = _auto_number(neg_segmentation, auto_number_as, caller)
+        
+        # AS 10.2023
+        # Check if operation was cancelled (neg)
+        if auto_number_return_neg == -1:
+            caller.signal_prog.emit(100, False) # Emit finished
+            return
 
     return new_segmentation, neg_segmentation
 
-
 # TODO: verify number of iterations in callers (cf. auto-numbering)
 def intersect(
+    caller,
     source,
     filtering,
     source_annotation_key=None,
@@ -746,7 +927,6 @@ def intersect(
     label='selected_data',
     copy_annotations=True,
     auto_number_as=None,
-    progress_callback=None,
 ):
     """In-/exclude segments in a segmentation ("source") based on whether these
     types occur in another segmentation ("filtering").
@@ -787,6 +967,13 @@ def intersect(
     the former, prefixed by 'NEG_')
     """
 
+    # Emit 1%
+    caller.signal_prog.emit(1, False)
+
+    # AS 11.2023
+    max_itr = len(source)
+    cur_itr = 1
+
     # Build a list with filtering items (content or annotation values)...
     if filtering_annotation_key is not None:
         filtering_list = [
@@ -825,13 +1012,43 @@ def intersect(
         else:
             neg_segmentation.append(new_segment)
 
-        if progress_callback:
-            progress_callback()
+        # AS 11.2023
+        # End thread if requested by user
+        if caller.cancel_operation:
+            caller.signal_prog.emit(100, False) # Emit finished
+            return
+
+        # AS 11.2023
+        # Update progress bar
+        cur_itr = update_progress_bar(caller, max_itr, cur_itr)
 
     # Auto-number (if needed)...
     if auto_number_as is not None and len(auto_number_as) > 0:
-        _auto_number(new_segmentation, auto_number_as)
-        _auto_number(neg_segmentation, auto_number_as)
+        # AS 11.2023
+        # Update label text and reset progress bar
+        caller.signal_text.emit(f'Step 2/3: Post-processing (auto-number selected segments)...', 'warning')
+        caller.signal_prog.emit(1, True) # Reset progress and re-init it
+    
+        auto_number_return_new = _auto_number(new_segmentation, auto_number_as, caller)
+        
+        # AS 11.2023
+        # Check if operation was cancelled (new)
+        if auto_number_return_new == -1:
+            caller.signal_prog.emit(100, False) # Emit finished
+            return
+    
+        # AS 11.2023
+        # Update label text and reset progress bar
+        caller.signal_text.emit(f'Step 3/3: Post-processing (auto-number discarded segments)...', 'warning')
+        caller.signal_prog.emit(1, True) # Reset progress and re-init it
+
+        auto_number_return_neg = _auto_number(neg_segmentation, auto_number_as, caller)
+        
+        # AS 11.2023
+        # Check if operation was cancelled (neg)
+        if auto_number_return_neg == -1:
+            caller.signal_prog.emit(100, False) # Emit finished
+            return
 
     return new_segmentation, neg_segmentation
 
@@ -839,6 +1056,7 @@ def intersect(
 def import_xml(
     segmentation,
     element,
+    caller,
     conditions=None,
     import_element_as=None,
     label='xml_data',
@@ -847,7 +1065,7 @@ def import_xml(
     auto_number_as=None,
     remove_markup=False,
     preserve_leaves=False,
-    progress_callback=None,
+    total_steps=1
 ):
     """Create a segmentation based on the xml content of an existing one.
 
@@ -903,9 +1121,6 @@ def import_xml(
     associated to the element closest to the root in the XML tree will be kept,
     otherwise the value of the element closest to the "surface" will be kept.
 
-    :param progress_callback: callback for monitoring progress ticks (1 for
-    each input segment)
-
     :return: new segmentation containing the extracted segments
     """
 
@@ -939,8 +1154,20 @@ def import_xml(
     temp_segments = list()
 
     # For each input segment...
+    
+    # AS 09.2023
+    # Emit arbitrary 1% progression ; only useful for user
+    # to indicate the program is not stuck at 0...
+    caller.signal_prog.emit(1, False)
+    
+    # Keeps track of current step
+    current_step = 1
+    
+    # AS 09.2023
+    max_itr = len(segmentation)
+    cur_itr = 1
+    
     for old_segment in segmentation:
-
         # Get its content and copy its annotations (if needed)...
         old_content = old_segment.get_content()
         if import_annotations:
@@ -955,6 +1182,12 @@ def import_xml(
         # Get segment address...
         old_str_index = old_segment.str_index
         old_start = old_segment.start or 0
+        
+        # AS 09.2023
+        # If there is only one element to process
+        # track this element progression
+        if len(segmentation) == 1:
+            max_itr = len(re.findall(tag_regex, old_content))
 
         # For each occurrence of the specified xml tag in the content...
         for match in re.finditer(tag_regex, old_content):
@@ -1034,8 +1267,26 @@ def import_xml(
                             '(orphan closing tag)'
                         )
 
-        if progress_callback:
-            progress_callback()
+            # AS 09.2023
+            # If there is only one element to process
+            # track this element progression
+            if len(segmentation) == 1:
+                cur_itr = update_progress_bar(caller, max_itr, cur_itr)
+
+            # AS 09.2023
+            # End thread if requested by user
+            if caller.cancel_operation:
+                caller.signal_prog.emit(100, False) # Emit finished
+                return
+
+        # AS 09.2023
+        # Update progress bar
+        if len(segmentation) > 1:
+            cur_itr = update_progress_bar(caller, max_itr, cur_itr)
+    
+    # AS 09.2023
+    # Set to 100%
+    caller.signal_prog.emit(100, False)
 
     temp_segments = sorted(
         temp_segments, key=lambda seg: (seg.str_index, seg.start, seg.end)
@@ -1051,26 +1302,44 @@ def import_xml(
 
     # Delete duplicate segments and merge their annotations if needed...
     if merge_duplicates:
-        new_segmentation = _merge_duplicate_segments(
-            new_segmentation,
-            preserve_leaves,
-        )
+        # AS 09.2023
+        current_step += 1
+        caller.signal_prog.emit(1, True) # Reset progress bar
+        caller.signal_text.emit(f'Step {current_step}/{total_steps}: Post-processing (fuse duplicates)...', 'warning')
+        new_segmentation = _merge_duplicate_segments(new_segmentation, preserve_leaves, caller)
+        
+    # AS 09.2023
+    # Check if operation was cancelled
+    if new_segmentation == -1:
+        caller.signal_prog.emit(100, False) # Emit finished
+        return
 
     # Auto-number if needed...
+    auto_number_return = 0
     if auto_number_as is not None and len(auto_number_as) > 0:
-        _auto_number(new_segmentation, auto_number_as)
+        # AS 09.2023
+        current_step += 1
+        caller.signal_prog.emit(1, True) # Reset progress bar
+        caller.signal_text.emit(f'Step {current_step}/{total_steps}: Post-processing (auto-number)...', 'warning')
+        auto_number_return = _auto_number(new_segmentation, auto_number_as, caller)
+
+    # AS 09.2023
+    # Check if operation was cancelled
+    if auto_number_return == -1:
+        caller.signal_prog.emit(100, False) # Emit finished
+        return
 
     return new_segmentation
 
-
 def recode(
+    caller,
     segmentation,
     substitutions=None,
     case=None,
     remove_accents=False,
     label='my_recoded_data',
     copy_annotations=True,
-    progress_callback=None,
+    check_overlap=True,
 ):
     """Recode the string(s) associated with a segmentation.
 
@@ -1097,9 +1366,6 @@ def recode(
     :param copy_annotations: boolean indicating whether annotations associated
     with input segments should be copied to output segments (default True)
 
-    :param progress_callback: callback for monitoring progress ticks (1 for
-    each input segment)
-
     :return: tuple whose first element is a new segmentation containing the
     recoded segments (this will be an Input object if it contains only one
     segment, and a Segmentation object if it contains more than one segments or
@@ -1115,8 +1381,10 @@ def recode(
     """
 
     # Check that input segmentation is not overlapping...
-    if not segmentation.is_non_overlapping():
-        raise ValueError('Cannot apply recoder to overlapping segmentation.')
+    # Check overlap by default, unless check_overlap is manually set to False
+    if check_overlap:
+        if not segmentation.is_non_overlapping():
+            raise ValueError('Cannot apply recoder to overlapping segmentation.')
 
     # Initializations...
     new_objects = list()
@@ -1127,6 +1395,14 @@ def recode(
     new_str_index = -1
 
     total_num_subs = 0
+    
+    # Current step count
+    current_step = 1
+    caller.signal_prog.emit(1, False)
+    
+    # Progression
+    max_itr = len(segmentation)
+    cur_itr = 1
 
     # For each input segment...
     for segment in segmentation:
@@ -1138,6 +1414,7 @@ def recode(
         # Change case if needed...
         if case == 'lower':
             recoded_text = recoded_text.lower()
+                        
         elif case == 'upper':
             recoded_text = recoded_text.upper()
 
@@ -1145,10 +1422,18 @@ def recode(
         # (cf. http://stackoverflow.com/questions/517923/
         # what-is-the-best-way-to-remove-accents-in-a-python-unicode-string)
         if remove_accents:
-            recoded_text = ''.join(
-                (c for c in unicodedata.normalize('NFD', recoded_text)
-                 if unicodedata.category(c) != 'Mn')
-            )
+            temp = list()
+            for c in unicodedata.normalize('NFD', recoded_text):
+                # AS 10.2023
+                # Cancel operation if requested by user
+                if caller.cancel_operation:
+                    caller.signal_prog.emit(100, False)
+                    return
+                    
+                # Append data to temporary list
+                if unicodedata.category(c) != 'Mn':
+                    temp.append(c)
+            recoded_text = ''.join(temp)
 
         # Apply substitutions (if any)...
         if substitutions is not None:
@@ -1159,6 +1444,12 @@ def recode(
                     recoded_text,
                 )
                 total_num_subs += num_subs
+                
+                # AS 10.2023
+                # Cancel operation if requested by user
+                if caller.cancel_operation:
+                    caller.signal_prog.emit(100, False)
+                    return
 
         # If text was modified, create and store new Input...
         if recoded_text != original_text:
@@ -1192,8 +1483,14 @@ def recode(
             last_recoded = False
             new_objects.append(new_segment)
 
-        if progress_callback:
-            progress_callback()
+        # Update progress bar
+        cur_itr = update_progress_bar(caller, max_itr, cur_itr)
+
+        # AS 10.2023
+        # Cancel operation if requested by user
+        if caller.cancel_operation:
+            caller.signal_prog.emit(100, False)
+            return
 
     # If list of new objects contains a single Input, return it.
     if len(new_objects) == 1 and isinstance(new_objects[0], Input):
@@ -1202,13 +1499,20 @@ def recode(
     # (including those contained in Input objects).
     # else:
     new_segmentation = Segmentation(None, label)
+    
     for new_object in new_objects:
         if isinstance(new_object, Input):
             new_segmentation.append(new_object[0])
         else:
             new_segmentation.append(new_object)
-    return new_segmentation, total_num_subs
+            
+        # AS 10.2023
+        # Cancel operation if requested by user
+        if caller.cancel_operation:
+            caller.signal_prog.emit(100, False)
+            return
 
+    return new_segmentation, total_num_subs
 
 def bypass(segmentation, label='bypassed_data'):
     """Return a verbatim copy of a segmentation
@@ -1220,10 +1524,19 @@ def bypass(segmentation, label='bypassed_data'):
 
     :return: deep copied segmentation.
     """
-    return Segmentation([s.deepcopy() for s in segmentation], label)
+    
+    # AS 10.2023
+    # As of 10.2023 and in order to facilitate thread post-processing,
+    # we need to have a tuple as output, not a single segmentation
+    return_tuple = (
+        Segmentation([s.deepcopy() for s in segmentation], label),
+        None
+    )
+
+    return return_tuple
 
 
-def _merge_duplicate_segments(segmentation, take_first=False):
+def _merge_duplicate_segments(segmentation, take_first=False, caller=None):
     """Delete duplicate segments in a segmentation and merge their annotations
 
     Using the fact that segments are always ordered by (start,end) and
@@ -1238,6 +1551,11 @@ def _merge_duplicate_segments(segmentation, take_first=False):
 
     :return: output segmentation with merged segments
     """
+
+    # AS 09.2023
+    # Update progress bar
+    max_itr = len(segmentation)
+    cur_itr = 1
 
     new_segments = Segmentation(label=segmentation.label)
 
@@ -1266,11 +1584,18 @@ def _merge_duplicate_segments(segmentation, take_first=False):
             new_segments.append(segment)
 
         last_seen = segment
+        
+        # AS 09.2023
+        # End thread if requested by user
+        if caller.cancel_operation:
+            return -1
+        # Update progress bar
+        cur_itr = update_progress_bar(caller, max_itr, cur_itr)
 
     return new_segments
 
 
-def _auto_number(segmentation, annotation_key):
+def _auto_number(segmentation, annotation_key, caller):
     """Add annotation with integers from 1 to N to segments in a list (in place)
 
     :param segment_list: the list of segments to auto-number
@@ -1278,12 +1603,25 @@ def _auto_number(segmentation, annotation_key):
     :param annotation_key: the annotation key with which generated numbers will
     be associated
     """
+    
+    # AS 09.2023
+    # Update progress bar
+    max_itr = len(segmentation)
+    cur_itr = 1
+    
     counter = 1
     for index, segment in enumerate(segmentation):
         segment.annotations[annotation_key] = counter
         segmentation[index] = segment
         counter += 1
+        
+        # AS 09.2023
+        # End thread if requested by user
+        if caller.cancel_operation:
+            return -1
 
+        # Update progress bar
+        cur_itr = update_progress_bar(caller, max_itr, cur_itr)
 
 def _parse_xml_tag(tag):
     """Parse an xml tag and return a dict describing it.

@@ -1,5 +1,5 @@
-"""Module Processor.py
-Copyright 2012-2025 LangTech Sarl (info@langtech.ch)
+"""Module ProcessorThread.py
+Copyright 2023-2025 LangTech Sarl (info@langtech.ch)
 ---------------------------------------------------------------------------
 This file is part of the LTTL package.
 
@@ -30,7 +30,7 @@ from builtins import str as text
 import numpy as np
 
 from .Segmentation import Segmentation
-from .Table import *
+from .TableThread import *
 from .Utils import (
     get_average,
     get_variety,
@@ -41,15 +41,54 @@ from .Utils import (
     generate_random_annotation_key,
     get_unused_char_in_segmentation,
     iround,
+    update_progress_bar
 )
 
-__version__ = "1.0.7"
+__version__ = "1.0.0"
 
+# AS 09.2023
+def count_post_treatements(table, caller):
+    """ Post treatement for count. Must be called
+    from the worker thread, otherwise it freezes the GUI """
+
+    textable_table = table
+    orange_table   = None
+
+    total = sum([i for i in textable_table.values.values()])
+
+    if total > 0:
+        if len(table.row_ids) == 1:
+            textable_table = textable_table.to_transposed().to_sorted(
+                key_col_id=textable_table.row_ids[0],
+                reverse_rows=True,
+            )
+
+            # We generate orange_table only if
+            # the function is not called internally
+            orange_table = textable_table.to_orange_table(caller=caller)
+        
+            # If table is None, operation was cancelled
+            # while method .to_orange_table() was called
+            # Second condition ensures that when called
+            # internally we don't enter this condition
+            if orange_table is None:
+                textable_table = None
+
+        else:
+            orange_table = textable_table.to_orange_table(caller=caller)
+            
+            # If table is None, operation was cancelled
+            # while method .to_orange_table() was called
+            if orange_table is None:
+                textable_table = None
+    
+    return (textable_table, orange_table)
 
 def count_in_context(
+    caller,
     units=None,
     contexts=None,
-    progress_callback=None,
+    called_internally=False,
 ):
     """Count units in contexts.
 
@@ -123,6 +162,11 @@ def count_in_context(
             else:
                 unit_list = [u.get_content() for u in unit_segmentation]
 
+            # AS 09.2023
+            # Track progression of iterations (used for progress bar)
+            max_itr = len(unit_list)        # Maximum amount of iterations
+            cur_itr = 1                     # Current iteration
+
             # Loop over context token indices...
             for context_index, context_segment in enumerate(
                     context_segmentation):
@@ -163,8 +207,15 @@ def count_in_context(
                     type_pair = (context_type, unit_type)
                     freq[type_pair] = freq.get(type_pair, 0) + 1
 
-                if progress_callback:
-                    progress_callback()
+                # AS 09.2023
+                # Updates progress bar, each percent
+                cur_itr = update_progress_bar(caller, max_itr, cur_itr)
+                
+                # AS 09.2023
+                # End thread if requested by user
+                if caller.cancel_operation:
+                    caller.signal_prog.emit(100, False)
+                    return
 
             # Store default context type if needed...
             if len(freq) > 0 and len(context_types) == 0:
@@ -172,7 +223,11 @@ def count_in_context(
 
         # CASE 1B: unit sequence length is 1...
         else:
-
+            # AS 09.2023
+            # Track progression of iterations (used for progress bar)
+            max_itr = len(contexts['segmentation']) # Maximum amount of iterations
+            cur_itr = 1                     # Current iteration
+                
             # Loop over context tokens (=containing segments)
             for context_token in contexts['segmentation']:
 
@@ -210,8 +265,15 @@ def count_in_context(
                     type_pair = (context_type, unit_type)
                     freq[type_pair] = freq.get(type_pair, 0) + 1
 
-                if progress_callback:
-                    progress_callback()
+                # AS 09.2023
+                # Update progress bar
+                cur_itr = update_progress_bar(caller, max_itr, cur_itr)
+
+                # AS 09.2023
+                # End thread if requested by user
+                if caller.cancel_operation:
+                    caller.signal_prog.emit(100, False)
+                    return
 
     # CASE 2: no context segmentation is specified...
     elif units['segmentation'] is not None:
@@ -229,7 +291,6 @@ def count_in_context(
 
         # CASE 2A: unit sequence length is greater than 1...
         if unit_seq_length > 1:
-
             # Get the list of units in final format...
             if unit_annotation_key is not None:
                 unit_list = [
@@ -241,6 +302,11 @@ def count_in_context(
                 ]
             else:
                 unit_list = [u.get_content() for u in unit_segmentation]
+
+            # AS 09.2023
+            # Track progression of iterations (used for progress bar)
+            max_itr = unit_segmentation_length - (unit_seq_length - 1) # Maximum amount of iterations
+            cur_itr = 1 # Current iteration
 
             # Loop over unit sequences (=contained segments)
             for unit_index in range(
@@ -260,12 +326,18 @@ def count_in_context(
                 type_pair = (context_type, unit_type)
                 freq[type_pair] = freq.get(type_pair, 0) + 1
 
-                if progress_callback:
-                    progress_callback()
+                # AS 09.2023
+                # Update progress bar
+                cur_itr = update_progress_bar(caller, max_itr, cur_itr)
+
+                # AS 09.2023
+                # End thread if requested by user
+                if caller.cancel_operation:
+                    caller.signal_prog.emit(100, False)
+                    return
 
         # CASE 2B: unit sequence length is 1...
         else:
-
             # Get the list of units in final format...
             if unit_annotation_key is not None:
                 unit_list = [
@@ -280,23 +352,36 @@ def count_in_context(
 
             # Get unit types...
             unit_types = list(set(unit_list))
-
+            
+            # AS 09.2023
+            # Track progression of iterations (used for progress bar)
+            max_itr = len(unit_list)        # Maximum amount of iterations
+            cur_itr = 1                     # Current iteration
+            
             # Loop over unit tokens (=contained segments)
             for unit_type in unit_list:
 
                 # Increment count of context-unit pair...
                 type_pair = (context_type, unit_type)
                 freq[type_pair] = freq.get(type_pair, 0) + 1
-
-                if progress_callback:
-                    progress_callback()
+                
+                # AS 09.2023
+                # Update progress bar
+                cur_itr = update_progress_bar(caller, max_itr, cur_itr)
+                
+                # AS 09.2023
+                # End thread if requested by user
+                if caller.cancel_operation:
+                    caller.signal_prog.emit(100, False)
+                    return
 
     # Create pivot crosstab...
     if len(context_types) and isinstance(context_types[0], int):
         header_type = 'continuous'
     else:
         header_type = 'string'
-    return (
+    
+    pivot_crosstab = (
         IntPivotCrosstab(
             context_types,
             unit_types,
@@ -311,12 +396,27 @@ def count_in_context(
             None,
         )
     )
+    
+    # AS 10.2023
+    # If called internally as part of another function
+    # (e.g. variety_in_context)
+    if called_internally:
+        # Return only textable table for further processing
+        return pivot_crosstab
 
+    # If called normally, do post treatements in ProcessorThread
+    else:
+        caller.signal_prog.emit(100, True)
+        caller.signal_text.emit(u'Step 2/2: Post-processing...', 'warning')
+        caller.signal_prog.emit(1, True)
+
+        return  count_post_treatements(pivot_crosstab, caller)
 
 def count_in_window(
+    caller,
     units=None,
     window_size=1,
-    progress_callback=None,
+    called_internally=False,
 ):
     """Count units in sliding window.
 
@@ -367,10 +467,14 @@ def count_in_window(
 
         # CASE 1: unit sequence length is greater than 1...
         if units['seq_length'] > 1:
-
             # Optimization...
             seq_join = units['intra_seq_delimiter'].join
             unit_seq_length = units['seq_length']
+            
+            # AS 09.2023
+            # Track progression of iterations (used for progress bar)
+            max_itr = len(units['segmentation']) - (window_size - 1) # Maximum amount of iterations
+            cur_itr = 1 # Current iteration
 
             # Get counts for first window...
             first_window = unit_list[:window_size]
@@ -387,9 +491,6 @@ def count_in_window(
             freq = dict(
                 [(('1', k), v) for (k, v) in iteritems(window_freq)]
             )
-
-            if progress_callback:
-                progress_callback()
 
             # Loop over other window indices...
             for window_index in range(
@@ -430,11 +531,22 @@ def count_in_window(
                     )
                 )
 
-                if progress_callback:
-                    progress_callback()
+                # AS 09.2023
+                # Update progress bar
+                cur_itr = update_progress_bar(caller, max_itr, cur_itr)
+
+                # AS 09.2023
+                # End thread if requested by user
+                if caller.cancel_operation:
+                    caller.signal_prog.emit(100, False)
+                    return
 
         # CASE 2: unit sequence length is 1...
         else:
+            # AS 09.2023
+            # Track progression of iterations (used for progress bar)
+            max_itr = len(units['segmentation']) - (window_size - 1) # Maximum amount of iterations
+            cur_itr = 1                     # Current iteration
 
             # Get unit types...
             unit_types = list(set(unit_list))
@@ -449,9 +561,6 @@ def count_in_window(
             freq = dict(
                 [(('1', k), v) for (k, v) in iteritems(window_freq)]
             )
-
-            if progress_callback:
-                progress_callback()
 
             # Loop over other window indices...
             for window_index in range(
@@ -478,12 +587,19 @@ def count_in_window(
                         ]
                     )
                 )
+                
+                # AS 09.2023
+                # Update progress bar
+                cur_itr = update_progress_bar(caller, max_itr, cur_itr)
 
-                if progress_callback:
-                    progress_callback()
+                # AS 09.2023
+                # End thread if requested by user
+                if caller.cancel_operation:
+                    caller.signal_prog.emit(100, False)
+                    return
 
     # Create pivot crosstab...
-    return (
+    pivot_crosstab = (
         IntPivotCrosstab(
             [text(i) for i in range(1, window_type + 1)],
             unit_types,
@@ -499,11 +615,25 @@ def count_in_window(
         )
     )
 
+    # AS 10.2023
+    # If called internally as part of another function
+    # (e.g. variety_in_context)
+    if called_internally:
+        # Return only textable table for further processing
+        return pivot_crosstab
+
+    # If called normally, do post treatements in ProcessorThread
+    else:
+        caller.signal_prog.emit(100, True)
+        caller.signal_text.emit(u'Step 2/2: Post-processing...', 'warning')
+        caller.signal_prog.emit(1, True)
+
+        return count_post_treatements(pivot_crosstab, caller)
 
 def count_in_chain(
+    caller,
     units=None,
     contexts=None,
-    progress_callback=None,
 ):
     """Count units given left and/or right context.
 
@@ -580,7 +710,13 @@ def count_in_chain(
         # Get the list of string indices...
         str_indices = [s.get_real_str_index() for s in unit_segmentation]
 
+        # AS 09.2023
+        # Track progression of iterations (used for progress bar)
+        max_itr = len(units['segmentation']) - (window_size - 1) # Maximum amount of iterations
+        cur_itr = 1 # Current iteration
+
         # CASE 1: unit sequence length is greater than 1...
+        
         if unit_seq_length > 1:
 
             # Loop over window indices...
@@ -597,8 +733,17 @@ def count_in_chain(
                     not merge_strings and
                     idx_sequence.count(idx_sequence[0]) != len(idx_sequence)
                 ):
-                    if progress_callback:
-                        progress_callback()
+                    
+                    # AS 09.2023
+                    # Update progress bar
+                    cur_itr = update_progress_bar(caller, max_itr, cur_itr)
+
+                    # AS 09.2023
+                    # End thread if requested by user
+                    if caller.cancel_operation:
+                        caller.signal_prog.emit(100, False)
+                        return
+
                     continue
 
                 # Get context type...
@@ -634,12 +779,18 @@ def count_in_chain(
                 type_pair = (context_type, unit_type)
                 freq[type_pair] = freq.get(type_pair, 0) + 1
 
-                if progress_callback:
-                    progress_callback()
+                # AS 09.2023
+                # Update progress bar
+                cur_itr = update_progress_bar(caller, max_itr, cur_itr)
+
+                # AS 09.2023
+                # End thread if requested by user
+                if caller.cancel_operation:
+                    caller.signal_prog.emit(100, False)
+                    return
 
         # CASE 2: unit sequence length is 1...
         else:
-
             # Get unit types...
             unit_types = list(
                 set(
@@ -664,8 +815,16 @@ def count_in_chain(
                     not merge_strings and
                     idx_sequence.count(idx_sequence[0]) != len(idx_sequence)
                 ):
-                    if progress_callback:
-                        progress_callback()
+                    # AS 09.2023
+                    # Update progress bar
+                    cur_itr = update_progress_bar(caller, max_itr, cur_itr)
+
+                    # AS 09.2023
+                    # End thread if requested by user
+                    if caller.cancel_operation:
+                        caller.signal_prog.emit(100, False)
+                        return
+
                     continue
 
                 # Get context type...
@@ -693,11 +852,18 @@ def count_in_chain(
                 type_pair = (context_type, unit_type)
                 freq[type_pair] = freq.get(type_pair, 0) + 1
 
-                if progress_callback:
-                    progress_callback()
+                # AS 09.2023
+                # Update progress bar
+                cur_itr = update_progress_bar(caller, max_itr, cur_itr)
+
+                # AS 09.2023
+                # End thread if needed
+                if caller.cancel_operation:
+                    caller.signal_prog.emit(100, False)
+                    return
 
     # Create pivot crosstab...
-    return (
+    pivot_crosstab = (
         IntPivotCrosstab(
             context_types,
             unit_types,
@@ -713,12 +879,19 @@ def count_in_chain(
         )
     )
 
+    # AS 10.2023
+    # Do post treatements in ProcessorThread instead of Widget
+    caller.signal_prog.emit(100, True)
+    caller.signal_text.emit('Step 2/2: Post-processing...', 'warning')
+    caller.signal_prog.emit(1, False)
+
+    return count_post_treatements(pivot_crosstab, caller)
 
 def length_in_context(
+    caller,
     units=None,
     averaging=None,
     contexts=None,
-    progress_callback=None,
 ):
     """Compute length of segmentation / av. length of units in contexts.
 
@@ -759,6 +932,9 @@ def length_in_context(
     values = dict()
     context_types = list()
     col_ids = list()
+    
+    # Emit 1%
+    caller.signal_prog.emit(1, False)
 
     # CASE 1: context segmentation is specified...
     if contexts['segmentation'] is not None and units is not None:
@@ -794,6 +970,16 @@ def length_in_context(
 
             lengths = dict()
             
+            # AS 09.2023
+            # Show informative message
+            caller.signal_text.emit('Step 1/2: Processing...', 'warning')
+            
+            # AS 09.2023
+            # Track progression of iterations (used for progress bar)
+            max_itr = len(contexts['segmentation']) + len(context_types) # Maximum iterations
+                                                                         # it counts both for loops
+            cur_itr = 1                                                  # Current iteration
+            
             # Loop over context token indices...
             for context_index, context_segment in enumerate(
                 contexts['segmentation']
@@ -816,18 +1002,36 @@ def length_in_context(
                 )
 
                 # Get lengths for these averaging units and store with type...
-                my_lengths = [
-                    len(averaging_unit.get_contained_segments(units))
-                    for averaging_unit in averaging_units
-                ]              
+                my_lengths = list()
+
+                for averaging_unit in averaging_units:
+                    my_lengths.append(
+                        len(averaging_unit.get_contained_segments(
+                            units)
+                        )
+                    )
+
+                    # AS 09.2023
+                    # End thread if requested by user
+                    if caller.cancel_operation:
+                        caller.signal_prog.emit(100, False) # Emit finished
+                        return
+                
                 try:
                     lengths[context_type].extend(my_lengths)
                 except KeyError:
                     lengths[context_type] = my_lengths
-                    
-                if progress_callback:
-                    progress_callback()
-            print(lengths)
+                
+                # AS 09.2023
+                # Update progress bar
+                cur_itr = update_progress_bar(caller, max_itr, cur_itr)
+
+                # AS 09.2023
+                # End thread if requested by user
+                if caller.cancel_operation:
+                    caller.signal_prog.emit(100, False) # Emit finished
+                    return
+            
             # Loop over context types...
             for context_type in context_types:
 
@@ -843,6 +1047,16 @@ def length_in_context(
                 if averaging['std_deviation']:
                     values[context_type, '__length_std_deviation__'] =    \
                         np.std(lengths[context_type])
+                        
+                # AS 09.2023
+                # Update progress bar
+                cur_itr = update_progress_bar(caller, max_itr, cur_itr)
+
+                # AS 09.2023
+                # End thread if requested by user
+                if caller.cancel_operation:
+                    caller.signal_prog.emit(100, False) # Emit finished
+                    return
 
             # Store col ids...
             if len(values) > 0:
@@ -853,6 +1067,10 @@ def length_in_context(
 
         # CASE 1B: no averaging units are specified...
         else:
+            # AS 09.2023
+            # Track progression of iterations (used for progress bar)
+            max_itr = len(contexts['segmentation']) # Maximum iterations
+            cur_itr = 1                             # Current iteration
 
             # Loop over context token indices...
             for context_index, context_segment in enumerate(
@@ -874,8 +1092,15 @@ def length_in_context(
                     context_token.get_contained_segments(units)
                 )
 
-                if progress_callback:
-                    progress_callback()
+                # AS 09.2023
+                # Update progress bar
+                cur_itr = update_progress_bar(caller, max_itr, cur_itr)
+
+                # AS 09.2023
+                # End thread if requested by user
+                if caller.cancel_operation:
+                    caller.signal_prog.emit(100, False) # Emit finished
+                    return
 
             # Store col ids...
             if len(values) > 0:
@@ -891,10 +1116,27 @@ def length_in_context(
             context_type = '__global__'
             context_types.append(context_type)
 
-            lengths = [
-                len(averaging_unit.get_contained_segments(units))
-                for averaging_unit in averaging['segmentation']
-            ]
+            lengths = []
+            
+            # AS 09.2023
+            #  Loop had to be rewritten in order to cancel/track progress
+            #  Can't be list comprehension anymore
+            # Track progression of iterations (used for progress bar)
+            max_itr = len(averaging['segmentation']) # Maximum iteration
+            cur_itr = 1                              # Current iteration
+            
+            for averaging_unit in averaging['segmentation']:
+                lengths.append(len(averaging_unit.get_contained_segments(units)))
+                
+                # AS 09.2023
+                # Update progress bar
+                cur_itr = update_progress_bar(caller, max_itr, cur_itr)
+
+                # AS 09.2023
+                # End thread if requested by user
+                if caller.cancel_operation:
+                    caller.signal_prog.emit(100, False) # Emit finished
+                    return
             
             values[context_type, '__length_average__'] = np.mean(lengths)
             values[context_type, '__length_count__'] = len(lengths)
@@ -913,7 +1155,6 @@ def length_in_context(
 
         # CASE 2B: no averaging units are specified...
         else:
-
             # Set default (unique) context type...
             context_type = '__global__'
             context_types.append(context_type)
@@ -924,6 +1165,9 @@ def length_in_context(
             # Store col ids...
             if len(values) > 0:
                 col_ids.append('__length__')
+                
+            # AS 09.2023
+            caller.signal_prog.emit(100, False) # Emit finished
 
     # Store default context type if needed...
     if len(values) > 0 and len(context_types) == 0:
@@ -952,7 +1196,13 @@ def length_in_context(
         header_type = 'continuous'
     else:
         header_type = 'string'
-    return (
+
+    # Post-processing tables
+    caller.signal_prog.emit(1, True)
+    caller.signal_text.emit(u'Step 2/2: Post-processing...', 'warning')
+
+    # Textable table
+    textable_table= (
         Table(
             context_types,
             col_ids,
@@ -968,12 +1218,21 @@ def length_in_context(
         )
     )
 
+    # Orange table
+    orange_table = textable_table.to_orange_table(caller=caller)
+
+    # If Orange table is None, operation was cancelled
+    # while method .to_orange_table() was called
+    if orange_table is None:
+        textable_table = None
+
+    return (textable_table, orange_table)
 
 def length_in_window(
+    caller,
     units=None,
     averaging=None,
     window_size=1,
-    progress_callback=None,
 ):
     """Compute average length of units in sliding window.
 
@@ -1000,6 +1259,9 @@ def length_in_window(
     values = dict()
     window_type = 0
     col_ids = list()
+    
+    # Emit 1%
+    caller.signal_prog.emit(1, False)
 
     if (
         units is not None and
@@ -1029,8 +1291,11 @@ def length_in_window(
             values[('1', '__length_std_deviation__')] = stdev
             values[('1', '__length_count__')] = window_size
 
-            if progress_callback:
-                progress_callback()
+            
+            # AS 09.2023
+            # Track progression of iterations (used for progress bar)
+            max_itr = len(averaging_segmentation) - (window_size - 1) # Maximum iterations
+            cur_itr = 1 # Current iteration
 
             # Loop over other window indices...
             for window_index in range(
@@ -1068,12 +1333,18 @@ def length_in_window(
                 values[(window_str, '__length_std_deviation__')] = stdev
                 values[(window_str, '__length_count__')] = window_size
 
-                if progress_callback:
-                    progress_callback()
+                # AS 09.2023
+                # Update progress bar
+                cur_itr = update_progress_bar(caller, max_itr, cur_itr)
+
+                # AS 09.2023
+                # End thread if requested by user
+                if caller.cancel_operation:
+                    caller.signal_prog.emit(100, False) # Emit finished
+                    return
 
         # CASE 2: standard deviation need not be computed......
         else:
-
             # Get lengths for first window...
             lengths = [
                 len(a.get_contained_segments(units))
@@ -1087,8 +1358,10 @@ def length_in_window(
             values[('1', '__length_average__')] = average
             values[('1', '__length_count__')] = window_size
 
-            if progress_callback:
-                progress_callback()
+            # AS 09.2023
+            # Track progression of iterations (used for progress bar)
+            max_itr = len(averaging_segmentation) - (window_size - 1) # Maximum iterations
+            cur_itr = 1 # Current iteration
 
             # Loop over other window indices...
             for window_index in range(
@@ -1119,8 +1392,15 @@ def length_in_window(
                 values[(window_str, '__length_average__')] = average
                 values[(window_str, '__length_count__')] = window_size
 
-                if progress_callback:
-                    progress_callback()
+                # AS 09.2023
+                # Update progress bar
+                cur_itr = update_progress_bar(caller, max_itr, cur_itr)
+
+                # AS 09.2023
+                # End thread if requested by user
+                if caller.cancel_operation:
+                    caller.signal_prog.emit(100, False) # Emit finished
+                    return
 
         # Store col ids...
         if len(values) > 0:
@@ -1129,8 +1409,12 @@ def length_in_window(
                 col_ids.append('__length_std_deviation__')
             col_ids.append('__length_count__')
 
-    # Create Table...
-    return (
+    # Post-processing tables
+    caller.signal_prog.emit(1, True)
+    caller.signal_text.emit(u'Step 2/2: Post-processing...', 'warning')
+
+    # Textable table
+    textable_table= (
         Table(
             [text(i) for i in range(1, window_type + 1)],
             col_ids,
@@ -1145,9 +1429,19 @@ def length_in_window(
             None,
         )
     )
+    
+    # Orange table
+    orange_table = textable_table.to_orange_table(caller=caller)
 
+    # If table is None, operation was cancelled
+    # while method .to_orange_table() was called
+    if orange_table is None:
+        textable_table = None
+
+    return (textable_table, orange_table)
 
 def variety_in_context(
+    caller,
     units=None,
     categories=None,
     contexts=None,
@@ -1155,7 +1449,6 @@ def variety_in_context(
     apply_resampling=False,
     subsample_size=None,
     num_subsamples=None,
-    progress_callback=None,
 ):
     """Get variety of units in contexts.
 
@@ -1180,6 +1473,21 @@ def variety_in_context(
 
     Returns a Table.
     """
+    
+    # AS 10.2023
+    caller.signal_prog.emit(1, False)
+    
+    # Adjust message according to what happens next
+    total_steps = 3 # Always 3, except in a specific case
+    current_step = 1
+    
+    # Specific case in which there are 2 pre-processing steps
+    # because count_in_context is called 2 times
+    if measure_per_category and apply_resampling and categories['adjust']:
+        total_steps += 1
+
+    caller.signal_text.emit(f'Step {current_step}/{total_steps}: Pre-processing (count units)...', 'warning')
+
     default_units = {
         'segmentation': None,
         'annotation_key': None,
@@ -1231,25 +1539,54 @@ def variety_in_context(
             categories['annotation_key'],
             units['annotation_key'],
         )
+
         counts = count_in_context(
-            {
+            caller,
+            units={
                 'segmentation': recoded_units,
                 'annotation_key': new_annotation_key,
                 'seq_length': units['seq_length'],
             },
-            contexts,
-            progress_callback,
+            contexts=contexts,
+            called_internally=True
         )
+        
+        # AS 10.2023
+        # If counts is None, it means the operation
+        # was cancelled in count_in_context.
+        # We have to return the current function too
+        if counts == None:
+            caller.signal_prog.emit(100, False)
+            return
+        
         if apply_resampling and categories['adjust']:
+            # AS 10.2023
+            # Update message to indicate another pre-processing step
+            # is being done before processing...
+            current_step += 1
+            caller.signal_text.emit(f'Step {current_step}/{total_steps}: Pre-processing (apply resampling)...', 'warning')
+            caller.signal_cancel_button.emit(False) # Reactivate cancel button
+
+            # Do second pre-process        
             category_counts = count_in_context(
-                {
+                caller,
+                units={
                     'segmentation': units['segmentation'],
                     'annotation_key': categories['annotation_key'],
                     'seq_length': units['seq_length'],
                 },
-                contexts,
-                progress_callback,
+                contexts=contexts,
+                called_internally=True
             )
+            
+            # AS 10.2023
+            # If category_counts is None, it means the operation
+            # was cancelled in count_in_context.
+            # We have to return the current function too
+            if category_counts == None:
+                caller.signal_prog.emit(100, False)
+                return
+            
             # Compute target lexematic diversity (for RMSP)...
             expected_varieties = list()
             for row_id in category_counts.row_ids:
@@ -1266,12 +1603,38 @@ def variety_in_context(
     # Else if categories are not specified...
     else:
         counts = count_in_context(
-            units,
-            contexts,
-            progress_callback,
+            caller,
+            units=units,
+            contexts=contexts,
+            called_internally=True
         )
         category_delimiter = None
+        
+        
+    # AS 10.2023
+    # If counts is None, it means the operation
+    # was cancelled in count_in_context.
+    # We have to return the current function too
+    if counts == None:
+        caller.signal_prog.emit(100, False)
+        return
+    
+    # AS 10.2023
+    # Reset progress bar, update label and process data
+    caller.signal_prog.emit(100, True)
+    current_step += 1
+    caller.signal_text.emit(f'Step {current_step}/{total_steps}: Processing...', 'warning')
+    caller.signal_prog.emit(1, False)
 
+    # AS 10.2023
+    # Reactivate cancel button that was disabled earlier
+    caller.signal_cancel_button.emit(False)
+
+    # AS 10.2023
+    # Track progression
+    max_itr = len(counts.row_ids) # Maximum iteration
+    cur_itr = 1                   # Current iteration
+    
     # Compute varieties...
     new_values = dict()
     if (
@@ -1281,8 +1644,10 @@ def variety_in_context(
         default_row_id = '__global__'
     else:
         default_row_id = None
+
     for row_id in counts.row_ids:
         row = tuple_to_simple_dict(counts.values, row_id)
+        
         if default_row_id is not None:
             row_id = default_row_id
         if apply_resampling:
@@ -1290,11 +1655,13 @@ def variety_in_context(
             if measure_per_category:
 
                 if categories["adjust"]:
+
                     # Find optimal subsample size (RMSP)...
                     cat_row = tuple_to_simple_dict(
                         category_counts.values,
                         row_id,
                     )
+                    
                     if subsample_size > sum(cat_row.values()):
                         continue
                     size_low, size_high = 2, subsample_size
@@ -1355,7 +1722,7 @@ def variety_in_context(
                     new_values[(row_id, '__variety_count__')] = num_subsamples
 
             elif units['weighting']:
-
+                
                 varieties = list()
                 for i in range(num_subsamples):
                     try:
@@ -1391,8 +1758,16 @@ def variety_in_context(
                 category_weighting=categories['weighting'],
                 category_delimiter=category_delimiter,
             )
-        if progress_callback:
-            progress_callback()
+
+        # AS 10.2023
+        # End thread if requested by user
+        if caller.cancel_operation:
+            caller.signal_prog.emit(100, False) # Emit finished
+            return
+        
+        # AS 10.2023
+        # Update progress bar
+        cur_itr = update_progress_bar(caller, max_itr, cur_itr)
 
     if default_row_id is not None:
         counts.row_ids[0] = default_row_id
@@ -1417,8 +1792,16 @@ def variety_in_context(
             new_col_ids = ['__expected_variety__']
     else:
         new_col_ids = ['__variety__']
+        
+    # AS 10.2023
+    # Reset progress bar, update label and post-process data
+    caller.signal_prog.emit(100, True)
+    current_step += 1
+    caller.signal_text.emit(f'Step {current_step}/{total_steps}: Post-processing...', 'warning')
+    caller.signal_prog.emit(1, False)
 
-    return (
+    # Textable table
+    textable_table = (
         Table(
             counts.row_ids[:],
             new_col_ids,
@@ -1433,9 +1816,19 @@ def variety_in_context(
             None,
         )
     )
+    
+    # Orange table
+    orange_table = textable_table.to_orange_table(caller=caller)
 
+    # If table is None, operation was cancelled
+    # while method .to_orange_table() was called
+    if orange_table is None:
+        textable_table = None
+
+    return (textable_table, orange_table)
 
 def variety_in_window(
+    caller,
     units=None,
     categories=None,
     measure_per_category=False,
@@ -1443,7 +1836,6 @@ def variety_in_window(
     apply_resampling=False,
     subsample_size=None,
     num_subsamples=None,
-    progress_callback=None,
 ):
     """Get variety of units in sliding window.
 
@@ -1462,6 +1854,20 @@ def variety_in_window(
 
     Returns a Table.
     """
+
+    # AS 10.2023
+    caller.signal_prog.emit(1, False)
+    
+    # Adjust message according to what happens next
+    total_steps = 3 # Always 3, except in a specific case
+    current_step = 1
+    
+    # Specific case in which there are 2 pre-processing steps
+    # because count_in_context is called 2 times
+    if measure_per_category and apply_resampling and categories['adjust']:
+        total_steps += 1
+
+    caller.signal_text.emit(f'Step {current_step}/{total_steps}: Pre-processing (count units)...', 'warning')
 
     default_units = {
         'segmentation': None,
@@ -1506,25 +1912,52 @@ def variety_in_window(
             units['annotation_key'],
         )
         counts = count_in_window(
-            {
+            caller=caller,
+            units={
                 'segmentation': recoded_units,
                 'annotation_key': new_annotation_key,
                 'seq_length': units['seq_length'],
                 'weighting': units['weighting'],
             },
-            window_size,
-            progress_callback,
+            window_size=window_size,
+            called_internally=True
         )
+        
+        # AS 10.2023
+        # If counts is None, it means the operation
+        # was cancelled in count_in_context.
+        # We have to return the current function too
+        if counts == None:
+            caller.signal_prog.emit(100, False)
+            return
+        
         if apply_resampling and categories['adjust']:
+            # AS 10.2023
+            # Update message to indicate another pre-processing step
+            # is being done before processing...
+            current_step += 1
+            caller.signal_text.emit(f'Step {current_step}/{total_steps}: Pre-processing (apply resampling)...', 'warning')
+            caller.signal_cancel_button.emit(False) # Reactivate cancel button
+        
             category_counts = count_in_window(
-                {
+                caller=caller,
+                units={
                     'segmentation': units['segmentation'],
                     'annotation_key': categories['annotation_key'],
                     'seq_length': units['seq_length'],
                 },
-                window_size,
-                progress_callback,
+                window_size=window_size,
+                called_internally=True
             )
+            
+            # AS 10.2023
+            # If category_counts is None, it means the operation
+            # was cancelled in count_in_context.
+            # We have to return the current function too
+            if category_counts == None:
+                caller.signal_prog.emit(100, False)
+                return
+
             # Compute target lexematic diversity (for RMSP)...
             expected_varieties = list()
             for row_id in category_counts.row_ids:
@@ -1541,11 +1974,36 @@ def variety_in_window(
     # Else if categories are not specified...
     else:
         counts = count_in_window(
-            units,
-            window_size,
-            progress_callback,
+            caller=caller,
+            units=units,
+            window_size=window_size,
+            called_internally=True
         )
         category_delimiter = None
+
+    # AS 10.2023
+    # If counts is None, it means the operation
+    # was cancelled in count_in_context.
+    # We have to return the current function too
+    if counts == None:
+        caller.signal_prog.emit(100, False)
+        return
+    
+    # AS 10.2023
+    # Reset progress bar, update label and process data
+    caller.signal_prog.emit(100, True)
+    current_step += 1
+    caller.signal_text.emit(f'Step {current_step}/{total_steps}: Processing...', 'warning')
+    caller.signal_prog.emit(1, False)
+
+    # AS 10.2023
+    # Reactivate cancel button that was disabled earlier
+    caller.signal_cancel_button.emit(False)
+
+    # AS 10.2023
+    # Track progression
+    max_itr = len(counts.row_ids) # Maximum iteration
+    cur_itr = 1                   # Current iteration
 
     # Compute varieties...
     new_values = dict()
@@ -1656,8 +2114,16 @@ def variety_in_window(
                 category_weighting=categories['weighting'],
                 category_delimiter=category_delimiter,
             )
-        if progress_callback:
-            progress_callback()
+
+        # AS 10.2023
+        # End thread if requested by user
+        if caller.cancel_operation:
+            caller.signal_prog.emit(100, False) # Emit finished
+            return
+        
+        # AS 10.2023
+        # Update progress bar
+        cur_itr = update_progress_bar(caller, max_itr, cur_itr)
 
     if apply_resampling:
         if measure_per_category:
@@ -1678,8 +2144,16 @@ def variety_in_window(
             new_col_ids = ['__expected_variety__']
     else:
         new_col_ids = ['__variety__']
+        
+    # AS 10.2023
+    # Reset progress bar, update label and post-process data
+    caller.signal_prog.emit(100, True)
+    current_step += 1
+    caller.signal_text.emit(f'Step {current_step}/{total_steps}: Post-processing...', 'warning')
+    caller.signal_prog.emit(1, False)
 
-    return (
+    # Textable table
+    textable_table = (
         Table(
             counts.row_ids[:],
             new_col_ids,
@@ -1695,12 +2169,22 @@ def variety_in_window(
         )
     )
 
+    # Orange table
+    orange_table = textable_table.to_orange_table(caller=caller)
+
+    # If table is None, operation was cancelled
+    # while method .to_orange_table() was called
+    if orange_table is None:
+        textable_table = None
+
+    return (textable_table, orange_table)
 
 def annotate_contexts(
+    caller,
     units=None,
     multiple_values=None,
     contexts=None,
-    progress_callback=None,
+    iterations=0
 ):
     """Annotate contexts.
 
@@ -1754,12 +2238,30 @@ def annotate_contexts(
         default_contexts.update(contexts)
     contexts = default_contexts
 
-    counts = count_in_context(
-        units,
-        contexts,
-        progress_callback,
-    )
+    # Emit 1%
+    caller.signal_prog.emit(1, False)
 
+    # Counts / Pre-processing 
+    counts = count_in_context(
+        caller=caller,
+        units=units,
+        contexts=contexts,
+        called_internally=True,
+    )
+    
+    # Check if operation was cancelled
+    if not counts:
+        caller.signal_prog.emit(100, False) # Emit finished
+        return
+    
+    # Tracking progress
+    max_itr = len(counts.row_ids)
+    cur_itr = 0
+    
+    # Processing
+    caller.signal_text.emit(u'Step 2/3: Processing...', 'warning')
+    caller.signal_prog.emit(1, True)
+    
     new_values = dict()
     for row_id in counts.row_ids:
         row = tuple_to_simple_dict(counts.values, row_id)
@@ -1783,8 +2285,17 @@ def annotate_contexts(
                 )
             )
 
-    # Create table...
-    return (
+        # End thread if requested by user
+        if caller.cancel_operation:
+            caller.signal_prog.emit(100, False) # Emit finished
+            return
+        
+        # AS 10.2023
+        # Update progress bar
+        cur_itr = update_progress_bar(caller, max_itr, cur_itr)
+
+    # Textable table...
+    textable_table = (
         Table(
             counts.row_ids[:],
             ['__annotation__'],
@@ -1800,11 +2311,25 @@ def annotate_contexts(
         )
     )
 
+    # Do post treatements in ProcessorThread instead of Widget
+    caller.signal_text.emit(u'Step 3/3: Post-processing...', 'warning')
+    caller.signal_prog.emit(1, True)
+    orange_table = textable_table.to_orange_table(caller=caller)
+
+    # If table is None, operation was cancelled
+    # while method .to_orange_table() was called
+    if orange_table is None:
+        caller.signal_prog.emit(100, False) # Emit finished
+        return
+
+    return (textable_table, orange_table)
+
 
 def context(
+    caller,
     units=None,
     contexts=None,
-    progress_callback=None,
+    iterations=None,
 ):
     """Concordance based on containing segmentation.
 
@@ -1822,6 +2347,14 @@ def context(
 
     Returns a table.
     """
+    
+    # AS 10.2023
+    # Track progression of iterations (used for progress bar) 
+    max_itr = iterations
+    cur_itr = 1
+
+    # Emit 1% to show the widget is not stuck
+    caller.signal_prog.emit(1, False)
 
     default_units = {
         'segmentation': None,
@@ -1932,8 +2465,15 @@ def context(
                 new_values[(row_id, context_annotation_key)] \
                     = context_annotation
 
-        if progress_callback:
-            progress_callback()
+        # AS 10.2023
+        # End thread if requested by user
+        if caller.cancel_operation:
+            caller.signal_prog.emit(100, False)
+            return
+
+        # AS 10.2023
+        # Update progress bar
+        cur_itr = update_progress_bar(caller, max_itr, cur_itr)
 
     # Create table...
     col_ids = ['__pos__']
@@ -1948,7 +2488,8 @@ def context(
         col_ids.append(context_annotation_key)
     col_types = dict([(p, 'string') for p in col_ids])
     col_types['__pos__'] = 'continuous'
-    return (
+    
+    textable_table = (
         Table(
             range(1, row_id + 1),
             col_ids,
@@ -1963,12 +2504,26 @@ def context(
             None,
         )
     )
-
+    
+    # AS 10.2023
+    # Do post treatements in ProcessorThread instead of Widget
+    caller.signal_prog.emit(100, True)
+    caller.signal_text.emit(u'Step 2/2: Post-processing...', 'warning')
+    caller.signal_prog.emit(1, True)
+    orange_table = textable_table.to_orange_table(caller=caller)
+    
+    # If table is None, operation was cancelled
+    # while method .to_orange_table() was called
+    if orange_table is None:
+        textable_table = None
+    
+    return (textable_table, orange_table)
 
 def neighbors(
+    caller,
     units=None,
     contexts=None,
-    progress_callback=None,
+    iterations=None,
 ):
     """Concordance based on neighboring segments.
 
@@ -1987,6 +2542,14 @@ def neighbors(
 
     Returns a table.
     """
+
+    # AS 10.2023
+    # Track progression of iterations (used for progress bar)
+    max_itr = iterations
+    cur_itr = 1
+    
+    # Emit 1% to show the widget is not stuck
+    caller.signal_prog.emit(1, False)
 
     default_units = {
         'segmentation': None,
@@ -2092,8 +2655,15 @@ def neighbors(
                         new_values[(row_id, text(pos) + 'R')] = \
                             string_value
 
-        if progress_callback:
-            progress_callback()
+        # AS 10.2023
+        # End thread if requested by user
+        if caller.cancel_operation:
+            caller.signal_prog.emit(100, False)
+            return
+
+        # AS 10.2023
+        # Update progress bar
+        cur_itr = update_progress_bar(caller, max_itr, cur_itr)
 
     # Create table...
     col_ids = ['__pos__']
@@ -2104,7 +2674,8 @@ def neighbors(
         col_ids.append(unit_annotation_key)
     col_types = dict([(p, 'string') for p in col_ids])
     col_types['__pos__'] = 'continuous'
-    return (
+    
+    textable_table = (
         Table(
             range(1, row_id + 1),
             col_ids,
@@ -2119,12 +2690,26 @@ def neighbors(
             None,
         )
     )
-
+    
+    # AS 10.2023
+    # Do post treatements in ProcessorThread instead of Widget
+    caller.signal_prog.emit(100, True)
+    caller.signal_text.emit(u'Step 2/2: Post-processing...', 'warning')
+    caller.signal_prog.emit(1, True)
+    orange_table = textable_table.to_orange_table(caller=caller)
+    
+    # If table is None, operation was cancelled
+    # while method .to_orange_table() was called
+    if orange_table is None:
+        textable_table = None
+    
+    return (textable_table, orange_table)
 
 def collocations(
+    caller,
     units=None,
     contexts=None,
-    progress_callback=None,
+    iterations=None,
 ):
     """Collocations based on neighboring segments.
 
@@ -2138,6 +2723,14 @@ def collocations(
 
     Returns a table.
     """
+
+    # AS 10.2023
+    # Track progression of iterations (used for progress bar) 
+    max_itr = iterations
+    cur_itr = 1
+
+    # Emit 1% to show the widget is not stuck
+    caller.signal_prog.emit(1, False)
 
     default_contexts = {
         'segmentation': None,
@@ -2212,8 +2805,15 @@ def collocations(
                     ):
                         neighbor_indices.add(right_index)
 
-        if progress_callback:
-            progress_callback()
+        # AS 10.2023
+        # End thread if requested by user
+        if caller.cancel_operation:
+            caller.signal_prog.emit(100, False)
+            return
+
+        # AS 10.2023
+        # Update progress bar
+        cur_itr = update_progress_bar(caller, max_itr, cur_itr)
 
     # Count local frequency...
     for neighbor in [context_list[i] for i in neighbor_indices]:
@@ -2256,7 +2856,7 @@ def collocations(
         '__global_freq__',
         '__global_prob__',
     ]
-    return (
+    textable_table = (
         Table(
             neighbor_types,
             col_ids,
@@ -2271,20 +2871,50 @@ def collocations(
             None,
         )
     )
-
+    
+    # AS 10.2023
+    # Do post treatements in ProcessorThread instead of Widget
+    caller.signal_prog.emit(100, True)
+    caller.signal_text.emit(u'Step 2/2: Post-processing...', 'warning')
+    caller.signal_prog.emit(1, True)
+    orange_table = textable_table.to_orange_table(caller=caller)
+    
+    # If table is None, operation was cancelled
+    # while method .to_orange_table() was called
+    if orange_table is None:
+        textable_table = None
+    
+    return (textable_table, orange_table)
 
 # TODO: docstring
 def cooc_in_window(
+    caller,
     units=None,
     window_size=2,
-    progress_callback=None,
+    iterations=0,
 ):
     """ Measure the cooccurrence in sliding window """
+
+    # Emit 1%
+    caller.signal_prog.emit(1, False)
+
+    # Contingency / Pre-processing
     contingency = count_in_window(
-        units,
-        window_size,
-        progress_callback,
+        caller=caller,
+        units=units,
+        window_size=window_size,
+        called_internally=True,
     )
+    
+    # Check if operation was cancelled
+    if not contingency:
+        caller.signal_prog.emit(100, False) # Emit finished
+        return
+
+    # Convert to orange table here and not in the widget
+    caller.signal_prog.emit(1, False)
+    caller.signal_text.emit(u'Step 2/3: Processing...', 'warning')
+
     normalized = contingency.to_normalized('presence/absence')
     np_contingency = normalized.to_numpy()
     cooc = np.dot(
@@ -2297,7 +2927,8 @@ def cooc_in_window(
             + "2"
             + contingency.header_row_id[-2:]
         )
-        return IntPivotCrosstab.from_numpy(
+        
+        textable_table = IntPivotCrosstab.from_numpy(
             contingency.col_ids[:],
             contingency.col_ids[:],
             cooc,
@@ -2307,27 +2938,74 @@ def cooc_in_window(
             contingency.header_row_type,
             contingency.col_type,
         )
+        
+        # Convert to orange table here and not in the widget
+        caller.signal_prog.emit(1, False)
+        caller.signal_text.emit(u'Step 3/3: Post-processing...', 'warning')
+        orange_table = textable_table.to_orange_table(caller=caller)
+        
+        # If table is None, operation was cancelled
+        # while method .to_orange_table() was called
+        if not orange_table:
+            caller.signal_prog.emit(100, False) # Emit finished
+            return
+
+        return (textable_table, orange_table)
+        
     except IndexError:
-        return IntPivotCrosstab(list(), list(), dict())
+        return (IntPivotCrosstab(list(), list(), dict()), None)
 
 
 # TODO: docstring
 def cooc_in_context(
+    caller,
     units=None,
-    contexts= None,
+    contexts=None,
     units2=None,
-    progress_callback=None,
+    iterations=0,
 ):
-    """ Measure the cooccurrence in a context type segmentation"""
+    """ Measure the cooccurrence in a context type segmentation """
+
+    # Emit 1%
+    caller.signal_prog.emit(1, False)
+
+    # Contingency 1 / Pre-processing
     contingency = count_in_context(
-        units,
-        contexts,
-        progress_callback,
+        caller=caller,
+        units=units,
+        contexts=contexts,
+        called_internally=True,
     )
+
+    # Check if operation was cancelled
+    if not contingency:
+        caller.signal_prog.emit(100, False) # Emit finished
+        return
+    
     normalized = contingency.to_normalized('presence/absence')
     np_contingency = normalized.to_numpy()
+
     if units2 is not None:
-        contingency2 = count_in_context(units2, contexts, progress_callback)
+    
+        # If there is only 1 segment to process,
+        # emit 50% of pre-processing because
+        # second part is below
+        if iterations == 1:
+            caller.signal_prog.emit(50, False)
+    
+        # Contingency 2 / Pre-processing
+        contingency2 = count_in_context(
+            caller=caller,
+            units=units2,
+            contexts=contexts,
+            called_internally=True,
+        )
+        
+        # Check if operation was cancelled
+        if not contingency2:
+            caller.signal_prog.emit(100, False) # Emit finished
+            return
+
         normalized2 = contingency2.to_normalized('presence/absence')
         np_contingency2 = normalized2.to_numpy()
         row_labels = contingency.row_ids
@@ -2339,6 +3017,12 @@ def cooc_in_context(
             i for i in xrange(len(row_labels2)) if row_labels2[i] in row_labels
         ]
         try:
+        
+            # Step 2 - Processing
+            caller.signal_prog.emit(1, True)
+            caller.signal_text.emit(u'Step 2/3: Processing...', 'warning')
+
+            # Processing
             np_contingency = np_contingency[keep_from_contingency].astype(int)
             np_contingency2 = np_contingency2[keep_from_contingency2].astype(int)
             cooc = np.dot(np.transpose(np_contingency2), np_contingency)
@@ -2350,7 +3034,8 @@ def cooc_in_context(
                 )
             else:
                 new_header_row_id = contingency.header_row_id
-            return IntPivotCrosstab.from_numpy(
+
+            textable_table = IntPivotCrosstab.from_numpy(
                 contingency2.col_ids[:],
                 contingency.col_ids[:],
                 cooc,
@@ -2360,9 +3045,30 @@ def cooc_in_context(
                 contingency2.header_row_type,
                 contingency.col_type,
             )
+            
+            # Convert to orange table here and not in the widget
+            caller.signal_prog.emit(1, True)
+            caller.signal_text.emit(u'Step 3/3: Post-processing...', 'warning')
+            orange_table = textable_table.to_orange_table(caller=caller)
+            
+            # If table is None, operation was cancelled
+            # while method .to_orange_table() was called
+            if not orange_table:
+                caller.signal_prog.emit(100, False) # Emit finished
+                return
+
+            return (textable_table, orange_table)
+
         except IndexError:
-            return IntPivotCrosstab(list(), list(), dict())
+            return (IntPivotCrosstab(list(), list(), dict()), None)
+
     else:
+
+        # Step 2 - Processing
+        caller.signal_prog.emit(1, True)
+        caller.signal_text.emit(u'Step 2/3: Processing...', 'warning')
+    
+        # Processing
         cooc = np.dot(np.transpose(np_contingency), np_contingency)
         try:
             new_header_row_id = (
@@ -2370,7 +3076,8 @@ def cooc_in_context(
                 + "2"
                 + contingency.header_row_id[-2:]
             )
-            return IntPivotCrosstab.from_numpy(
+            
+            textable_table = IntPivotCrosstab.from_numpy(
                 contingency.col_ids[:],
                 contingency.col_ids[:],
                 cooc,
@@ -2380,5 +3087,20 @@ def cooc_in_context(
                 contingency.header_row_type,
                 contingency.col_type,
             )
+            
+            # Convert to orange table here and not in the widget
+            caller.signal_prog.emit(1, True)
+            caller.signal_text.emit(u'Step 3/3: Post-processing...', 'warning')
+            orange_table = textable_table.to_orange_table(caller=caller)
+            
+            # If table is None, operation was cancelled
+            # while method .to_orange_table() was called
+            if not orange_table:
+                caller.signal_prog.emit(100, False) # Emit finished
+                return
+
+            return (textable_table, orange_table)
+            
         except IndexError:
-            return IntPivotCrosstab(list(), list(), dict())
+            return (IntPivotCrosstab(list(), list(), dict()), None)
+

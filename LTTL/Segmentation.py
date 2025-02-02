@@ -1,20 +1,20 @@
 """Module Segmentation.py
-Copyright 2012-2016 LangTech Sarl (info@langtech.ch)
+Copyright 2012-2025 LangTech Sarl (info@langtech.ch)
 ---------------------------------------------------------------------------
-This file is part of the LTTL package v2.0.
+This file is part of the LTTL package.
 
-LTTL v2.0 is free software: you can redistribute it and/or modify
+LTTL is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
 the Free Software Foundation, either version 3 of the License, or
 (at your option) any later version.
 
-LTTL v2.0 is distributed in the hope that it will be useful,
+LTTL is distributed in the hope that it will be useful,
 but WITHOUT ANY WARRANTY; without even the implied warranty of
 MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 GNU General Public License for more details.
 
 You should have received a copy of the GNU General Public License
-along with LTTL v2.0. If not, see <http://www.gnu.org/licenses/>.
+along with LTTL. If not, see <http://www.gnu.org/licenses/>.
 """
 
 from __future__ import absolute_import
@@ -30,7 +30,7 @@ import os
 from tempfile import NamedTemporaryFile
 from collections import deque
 
-__version__ = "1.0.5"
+__version__ = "1.0.6"
 
 # segmentation with more segments will have
 # their string representation summarized
@@ -40,10 +40,10 @@ MAX_SEGMENT_STRING = 1000
 NUM_SEGMENTS_SUMMARY = 5
 
 # maximum number of segments per chunk
-CHUNK_SIZE = 1000000
+CHUNK_SIZE = 250000000
 
 # maximum number of chunks that are kept in RAM
-CACHE_SIZE = 200
+CACHE_SIZE = 4
 
 # contains the chunk or a reference to the file on disk
 segments_cache = dict()
@@ -205,6 +205,10 @@ class Segmentation(object):
             self.buffer = []
             self.str_index_ptr = {}
             self.label = label
+            
+            # AX 30.08.23
+            self.annotation_key_count = dict()
+            
         # from a list of segments
         elif isinstance(segmentation, list):
             self.segments_nbr = len(segmentation)
@@ -214,6 +218,15 @@ class Segmentation(object):
             self.str_index_ptr = self._get_str_index_ptr(segmentation)
             self.buffer = segmentation
             self.label = label
+            
+            # AX 30.08.23
+            self.annotation_key_count = dict()
+            for segment in segmentation:
+                if segment.annotations:
+                    for key in segment.annotations:
+                        self.annotation_key_count[key] =    \
+                            self.annotation_key_count.get(key, 0) + 1
+                            
         # from another segmentation
         else:
             clone_chunks(segmentation, self)
@@ -223,10 +236,13 @@ class Segmentation(object):
             self.segments_nbr_in_chunk = segmentation.segments_nbr_in_chunk
             self.segments_nbr = segmentation.segments_nbr
             self.str_index_ptr = segmentation.str_index_ptr
-            if self.label == 'segmented_data':
+            if label == 'segmented_data':
                 self.label = segmentation.label
             else:
                 self.label = label
+                
+            # AX 30.08.23
+            self.annotation_key_count = segmentation.annotation_key_count  
 
     def __del__(self):
         try:
@@ -258,6 +274,19 @@ class Segmentation(object):
         """Set the value of a given segment"""
         if index < 0:
             index = self.segments_nbr + index
+            
+        # AX 30.08.23
+        if segment.annotations:
+            new_annotation_keys = set(segment.annotations)
+            old_annotation_keys = set(self.get_annotation(index)) or set()
+            removed_keys = old_annotation_keys - new_annotation_keys 
+            added_keys = new_annotation_keys - old_annotation_keys 
+            for key in removed_keys:
+                self.annotation_key_count[key] -= 1
+            for key in added_keys:
+                self.annotation_key_count[key] =    \
+                    self.annotation_key_count.get(key, 0) + 1
+            
         if index >= self.segments_nbr_in_chunk:
             self.buffer[index - self.segments_nbr_in_chunk] = segment
         else:
@@ -269,9 +298,9 @@ class Segmentation(object):
             set_chunk(self, index // CHUNK_SIZE+1, a)
             if (
                 segment.annotations is not None or
-                len(segment.annotations) is not 0
+                len(segment.annotations)
             ):
-                self.create_anotation()
+                self.create_annotation()
                 b = get_chunk(self, -(index // CHUNK_SIZE+1))
                 b[index % CHUNK_SIZE] = np.array(
                     self.get_annotation_tab(segment),
@@ -317,7 +346,7 @@ class Segmentation(object):
     def has_annotation(self):
         return get_chunk(self, -1) is not None
 
-    def create_anotation(self):
+    def create_annotation(self):
         if not self.has_annotation():
             nb_segment = self.segments_nbr_in_chunk
             id = -1
@@ -381,6 +410,13 @@ class Segmentation(object):
         self.segments_nbr += len(segments)
         while len(self.buffer) >= CHUNK_SIZE:
             self.store()
+            
+        # AX 30.08.23
+        for segment in segments:
+            if segment.annotations:
+                for key in segment.annotations:
+                    self.annotation_key_count[key] =    \
+                        self.annotation_key_count.get(key, 0) + 1            
 
     def append(self, segment):
         if self.segments_nbr == 0 or self[-1].str_index != segment.str_index:
@@ -389,6 +425,12 @@ class Segmentation(object):
         self.segments_nbr += 1
         if len(self.buffer) >= CHUNK_SIZE:
             self.store()
+            
+        # AX 30.08.23
+        if segment.annotations:
+            for key in segment.annotations:
+                self.annotation_key_count[key] =    \
+                    self.annotation_key_count.get(key, 0) + 1
 
     def store(self):
         from .Segment import Segment
@@ -421,9 +463,9 @@ class Segmentation(object):
                 ex_mat[index][2] = self.buffer[index].end
             if (
                 self.buffer[index].annotations is not None or
-                len(self.buffer[index].annotations) is not 0
+                len(self.buffer[index].annotations)
             ):
-                self.create_anotation()
+                self.create_annotation()
                 ex_annotation[index] =  \
                     self.get_annotation_tab(self.buffer[index])
         add_chunk(self, self.segments_nbr_in_chunk // CHUNK_SIZE + 1, ex_mat)
@@ -624,6 +666,9 @@ class Segmentation(object):
         # Define HTML header, footer and other template elements...
         html_header = """
             <html><head><style type="text/css">
+                h2 {
+                    background-color: white;
+                }
                 table {
                     border-width: 1px;
                     border-style: solid;
@@ -633,6 +678,7 @@ class Segmentation(object):
                 }
                 td {
                     border-width: 0px;
+                    background-color: white;
                     padding: 3px;
                     text-align: left;
                 }
@@ -713,26 +759,30 @@ class Segmentation(object):
     def get_annotation_keys(self):
         """Get the list of available annotation keys"""
 
-        # Initialize empty set.
-        annotation_keys = set()
+        # AX 30.08.23
+        return sorted(list(k for k, v in self.annotation_key_count.items() if v))
 
-        # Take the union of each segment's annotation keys...
-        for segment in self:
-            annotation_keys = annotation_keys.union(
-                list(segment.annotations)
-            )
+        # # Initialize empty set.
+        # annotation_keys = set()
 
-        return sorted(list(annotation_keys))
+        # # Take the union of each segment's annotation keys...
+        # for segment in self:
+            # annotation_keys = annotation_keys.union(
+                # list(segment.annotations)
+            # )
 
+        # return sorted(list(annotation_keys))
+        
     def is_non_overlapping(self):
-        """Determine if there is no segment overlap"""
+        """Determine if there is no segment overlap
+            Optimized version """
 
         # Get list of segments sorted by address...
         segmentation_sorted = self._sort()
 
         # For each segment (but the last)...
         for first_index in range(len(segmentation_sorted) - 1):
-
+        
             # Get the segment's address...
             first_segment = segmentation_sorted[first_index]
             first_str_index = first_segment.str_index
@@ -744,9 +794,14 @@ class Segmentation(object):
                 first_index + 1, len(segmentation_sorted)
             ):
                 second_segment = segmentation_sorted[second_index]
-                if second_segment.str_index != first_str_index:
-                    continue
+
+                # Optimized by AX 11.2023
+                if (second_segment.str_index != first_str_index
+                    or (second_segment.start or 0) >= first_end):
+                    break
+
                 if (second_segment.start or 0) < first_end:
                     return False
 
         return True
+

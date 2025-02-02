@@ -42,7 +42,7 @@ from builtins import str as text
 from future.utils import iteritems
 from past.builtins import xrange
 
-__version__ = "1.0.6"
+__version__ = "1.0.0"
 
 
 class Table(object):
@@ -113,6 +113,7 @@ class Table(object):
         output_orange_headers=False,
         col_delimiter='\t',
         row_delimiter=None,
+        caller=None,
     ):
         """Return a string representation of the table.
 
@@ -140,7 +141,21 @@ class Table(object):
         output_string = self.header_col_id + col_delimiter
 
         # Convert col headers to unicode strings and output...
-        output_string += col_delimiter.join(text(i) for i in self.col_ids)
+        
+        # AS 11.2023
+        # Rewrote this loop to make it cancellable
+        temp_outputs = []
+        for i in self.col_ids:
+            temp_outputs.append(text(i))
+            
+            # AS 11.2023
+            # End thread if requested by user
+            if caller:
+                if caller.cancel_operation:
+                    caller.signal_prog.emit(100, False)
+                    return
+        
+        output_string += col_delimiter.join(temp_outputs)
 
         # Add Orange 2 table headers if needed...
         if output_orange_headers:
@@ -149,13 +164,36 @@ class Table(object):
                 self.header_col_type,
                 col_delimiter,
             )
-            col_type_list = [self.col_type.get(x, '') for x in self.col_ids]
+            
+            # AS 11.2023
+            # Rewrote this loop to make it cancellable
+            col_type_list = []
+            for x in self.col_ids:
+                col_type_list.append(
+                    self.col_type.get(x, '')
+                )
+
+                # AS 11.2023
+                # End thread if requested by user
+                if caller:
+                    if caller.cancel_operation:
+                        caller.signal_prog.emit(100, False)
+                        return
+
             output_string += col_delimiter.join(col_type_list)
             output_string += row_delimiter + col_delimiter
             for col_id in self.col_ids:
                 if col_id == self.class_col_id:
                     output_string += 'class'
                 output_string += col_delimiter
+                
+                # AS 11.2023
+                # End thread if requested by user
+                if caller:
+                    if caller.cancel_operation:
+                        caller.signal_prog.emit(100, False)
+                        return
+                
             output_string = output_string[:-1]
 
         # Default (empty) string for missing values...
@@ -165,20 +203,32 @@ class Table(object):
             missing = text(self.missing)
 
         # Format row strings...
-        row_strings = (
-            '%s%s%s%s' % (
-                row_delimiter,
-                row_id,
-                col_delimiter,
-                col_delimiter.join(
-                    [
-                        text(self.values.get((row_id, col_id), missing))
-                        for col_id in self.col_ids
-                    ]
+
+        # AS 11.2023
+        # Rewrote this loop to make it cancellable
+        row_strings = list()
+        for row_id in self.row_ids:
+            cell_strings = list()
+            for col_id in self.col_ids:
+                cell_strings.append(
+                    text(self.values.get((row_id, col_id), missing))
+                )
+                
+                # AS 11.2023
+                # End thread if requested by user
+                if caller:
+                    if caller.cancel_operation:
+                        caller.signal_prog.emit(100, False)
+                        return
+                
+            row_strings.append(
+                '%s%s%s%s' % (
+                    row_delimiter,
+                    row_id,
+                    col_delimiter,
+                    col_delimiter.join(cell_strings)
                 )
             )
-            for row_id in self.row_ids
-        )
 
         # Concatenate into a single string and output it.
         return output_string + ''.join(row_strings)
@@ -186,7 +236,7 @@ class Table(object):
     # Method to_orange_table() is defined differently for Python 2 and 3.
     if sys.version_info.major >= 3:
         # TODO: test.
-        def to_orange_table(self, encoding='iso-8859-15'):
+        def to_orange_table(self, encoding='iso-8859-15', caller=None):
             """Create an Orange 3 table.
             :param encoding: ignored
             :return: an Orange 3 table
@@ -264,6 +314,12 @@ class Table(object):
                     else:
                         attr_vars.append(var)
 
+                # AS 09.2023
+                if caller:
+                    if caller.cancel_operation:
+                        caller.signal_prog.emit(100, False)
+                        return
+
             # Create Orange 3 domain and table
             domain = Orange.data.Domain(attr_vars, class_vars, meta_vars)
             if self.missing is not None:
@@ -271,6 +327,7 @@ class Table(object):
             else:
                 missing = None
             rows = []
+            
             for row_id in self.row_ids:
                 row_data = list()
                 for col_id, col_var in zip(
@@ -290,6 +347,25 @@ class Table(object):
                         value = missing
                     row_data.append(value)
                 rows.append(Orange.data.Instance(domain, row_data))
+                
+                # AS 09.2023
+                if caller:
+                    if caller.cancel_operation:
+                        caller.signal_prog.emit(100, False)
+                        return
+
+            # AS 10.2023
+            # Emit 50%, since approximately half of post-treatement is already done
+            if caller:
+                caller.signal_prog.emit(50, False)
+            
+            # AS 10.2023
+            # Disable cancel button, because converting to Orange table
+            # cannot be cancelled by the user...
+            if caller:
+                caller.signal_cancel_button.emit(True)
+
+            # Create orange table
             orange_table = Orange.data.Table.from_list(domain, rows)
 
             return orange_table
@@ -402,6 +478,7 @@ class Table(object):
         reverse_rows=False,
         key_row_id=None,
         reverse_cols=False,
+        caller=None,
     ):
         """Return a sorted copy of the table
 
@@ -433,18 +510,45 @@ class Table(object):
 
             # Otherwise sort rows by selected col...
             else:
-                values = [
-                    self.values.get((row_id, key_col_id), self.missing)
-                    for row_id in self.row_ids
-                ]
-                new_row_ids.extend(
-                    [
-                        x[1] for x in sorted(
-                            zip(values, self.row_ids),
-                            reverse=reverse_rows
+                values = []
+                
+                # AS 11.2023
+                # Rewrote this loop to make it cancellable
+                for row_id in self.row_ids:
+                    values.append(
+                        self.values.get(
+                            (row_id, key_col_id), self.missing
                         )
-                    ]
+                    )
+                    
+                    # AS 11.2023
+                    # End thread if requested by user
+                    if caller:
+                        if caller.cancel_operation:
+                            caller.signal_prog.emit(100, False)
+                            return
+
+                # AS 11.2023
+                # Rewrote this loop to make it cancellable
+                new_row_ids_list = []
+                
+                for x in sorted(
+                    zip(values, self.row_ids),
+                    reverse=reverse_rows
+                ):
+                    new_row_ids_list.append(x[1])
+                   
+                    # AS 11.2023
+                    # End thread if requested by user
+                    if caller:
+                        if caller.cancel_operation:
+                            caller.signal_prog.emit(100, False)
+                            return
+                            
+                new_row_ids.extend(
+                    new_row_ids_list
                 )
+
         # Else if no col id was specified for sorting rows, copy them directly.
         else:
             new_row_ids = self.row_ids[:]
@@ -458,21 +562,53 @@ class Table(object):
 
             # Otherwise sort cols by selected row...
             else:
-                values = [
-                    self.values.get((key_row_id, col_id), self.missing)
-                    for col_id in self.col_ids
-                ]
-                new_col_ids.extend(
-                    [
-                        x[1] for x in sorted(
-                            zip(values, self.col_ids),
-                            reverse=reverse_cols
+                values = []
+                
+                # AS 11.2023
+                # Rewrote this loop to make it cancellable
+                for col_id in self.col_ids:
+                    values.append(
+                        self.values.get(
+                            (key_row_id, col_id), self.missing
                         )
-                    ]
-                )
+                    )
+                    
+                    # AS 11.2023
+                    # End thread if requested by user
+                    if caller:
+                        if caller.cancel_operation:
+                            caller.signal_prog.emit(100, False)
+                            return
+                
+                # AS 11.2023
+                # Rewrote this loop to make it cancellable
+                new_row_ids_list = []
+                
+                for x in sorted(
+                    zip(values, self.col_ids),
+                    reverse=reverse_cols
+                ):
+                    new_row_ids_list.append(x[1] )
+
+                    # AS 11.2023
+                    # End thread if requested by user
+                    if caller:
+                        if caller.cancel_operation:
+                            caller.signal_prog.emit(100, False)
+                            return
+
+                new_col_ids.extend(new_row_ids_list)
+
         # Else if no row id was specified for sorting cols, copy them directly.
         else:
             new_col_ids = self.col_ids[:]
+
+        # AS 11.2023
+        # End thread if requested by user
+        if caller:
+            if caller.cancel_operation:
+                caller.signal_prog.emit(100, False)
+                return
 
         # Get original table's creator and use it to create new table...
         if isinstance(self, IntPivotCrosstab):
@@ -487,6 +623,14 @@ class Table(object):
             creator = WeightedFlatCrosstab
         else:
             creator = Table
+
+        # AS 11.2023
+        # End thread if requested by user
+        if caller:
+            if caller.cancel_operation:
+                caller.signal_prog.emit(100, False)
+                return
+
         return creator(
             new_row_ids,
             new_col_ids,
@@ -570,29 +714,64 @@ class PivotCrosstab(Crosstab):
     +----------+-------+-------+
     """
 
-    # TODO: test.
-    def to_transposed(self):
+    def to_transposed(self, caller=None):
         """Return a transposed copy of the crosstab"""
         new_col_ids = self.row_ids[:]
+
+        # Build dicts outside of PivotCrosstab
+        # constructor to make loop cancellable
+        
+        # Dict 1
+        dict_1 = []
+        
+        for key, count in iteritems(self.values):
+            dict_1.append(
+                (tuple(reversed(key)), count)
+            )
+            
+            # AS 11.2023
+            # End thread if requested by user
+            if caller:
+                if caller.cancel_operation:
+                    caller.signal_prog.emit(100, False)
+                    return
+            
+        dict_1 = dict(dict_1)
+        
+        # Dict 2
+        dict_2 = []
+        
+        for col_id in new_col_ids:
+            dict_2.append(
+                (col_id, 'continuous')
+            )
+            
+            # AS 11.2023
+            # End thread if requested by user
+            if caller:
+                if caller.cancel_operation:
+                    caller.signal_prog.emit(100, False)
+                    return
+        
+        dict_2 = dict(dict_2)
+        
+        # Build table
         return PivotCrosstab(
             self.col_ids[:],
             new_col_ids,
-            dict(
-                (tuple(reversed(key)), count)
-                for key, count in iteritems(self.values)
-            ),
+            dict_1,
             self.header_col_id,
             self.header_col_type,
             self.header_row_id,
             self.header_row_type,
-            dict([(col_id, 'continuous') for col_id in new_col_ids]),
+            dict_2,
             None,
             self.missing,
-            self.header_col_id,    # TODO: check this (was self._cached_row_id).
+            self.header_col_id, # TODO: check this (was self._cached_row_id).
         )
 
     # TODO: test.
-    def to_weighted_flat(self, progress_callback=None):
+    def to_weighted_flat(self, caller=None):
         """Convert the crosstab in 'weighted and flat' format
 
         :param progress_callback: callback for monitoring progress ticks (number
@@ -635,8 +814,18 @@ class PivotCrosstab(Crosstab):
                     new_values[(new_row_id, second_col_id)] = row_id
                 new_values[(new_row_id, '__weight__')] = count
                 row_counter += 1
-            if progress_callback:
-                progress_callback()
+            
+            # AS 11.2023
+            if caller:
+                # Update progress bar by 1 iteration
+                # This is a modified version of the signal
+                # that works only with ConvertThread!
+                caller.signal_prog.emit(-1, False)
+            
+                # End thread if requested by user
+                if caller.cancel_operation:
+                    caller.signal_prog.emit(100, False)
+                    return
 
         return WeightedFlatCrosstab(
             new_row_ids,
@@ -751,13 +940,13 @@ class PivotCrosstab(Crosstab):
 class IntPivotCrosstab(PivotCrosstab):
     """A class for storing crosstabs in 'pivot' format, with integer values."""
 
-    def to_transposed(self):
+    def to_transposed(self, caller=None):
         """Return a transposed copy of the crosstab"""
-        transposed = super(IntPivotCrosstab, self).to_transposed()
+        transposed = super(IntPivotCrosstab, self).to_transposed(caller=caller)
         transposed.__class__ = IntPivotCrosstab
         return transposed
 
-    def to_normalized(self, mode='rows', type='l1', progress_callback=None):
+    def to_normalized(self, mode='rows', type='l1', caller=None):
         """Return a normalized copy of the crosstab (where normalization is
         defined in a rather liberal way, cf. details below.
 
@@ -784,6 +973,7 @@ class IntPivotCrosstab(PivotCrosstab):
 
         :return: normalized copy of crosstab
         """
+        
         new_values = dict()
         denominator = 0
         if mode == 'rows':
@@ -808,8 +998,19 @@ class IntPivotCrosstab(PivotCrosstab):
                         [(row_id, col_id) for col_id in col_ids],
                         [0 for v in row_values]
                     ))
-                if progress_callback:
-                    progress_callback()
+
+                # AS 11.2023
+                if caller:
+                    # Update progress bar by 1 iteration
+                    # This is a modified version of the signal
+                    # that works only with ConvertThread!
+                    caller.signal_prog.emit(-1, False)
+                
+                    # End thread if requested by user
+                    if caller.cancel_operation:
+                        caller.signal_prog.emit(100, False)
+                        return
+
         elif mode == 'columns':
             table_class = PivotCrosstab
             row_ids = self.row_ids
@@ -832,8 +1033,19 @@ class IntPivotCrosstab(PivotCrosstab):
                         [(row_id, col_id) for row_id in row_ids],
                         [0 for v in col_values]
                     ))
-                if progress_callback:
-                    progress_callback()
+
+                # AS 11.2023
+                if caller:
+                    # Update progress bar by 1 iteration
+                    # This is a modified version of the signal
+                    # that works only with ConvertThread!
+                    caller.signal_prog.emit(-1, False)
+                
+                    # End thread if requested by user
+                    if caller.cancel_operation:
+                        caller.signal_prog.emit(100, False)
+                        return
+
         elif mode == 'table':
             table_class = PivotCrosstab
             values = reduce(list.__add__, [
@@ -874,8 +1086,19 @@ class IntPivotCrosstab(PivotCrosstab):
                         new_values[(row_id, col_id)] = 1 if value > 0 else 0
                     except KeyError:
                         pass
-                    if progress_callback:
-                        progress_callback()
+                    
+                    # AS 11.2023
+                    if caller:
+                        # Update progress bar by 1 iteration
+                        # This is a modified version of the signal
+                        # that works only with ConvertThread!
+                        caller.signal_prog.emit(-1, False)
+                    
+                        # End thread if requested by user
+                        if caller.cancel_operation:
+                            caller.signal_prog.emit(100, False)
+                            return
+
         elif mode == 'quotients':
             table_class = PivotCrosstab
             row_ids = self.row_ids
@@ -887,8 +1110,19 @@ class IntPivotCrosstab(PivotCrosstab):
                     for row_id in row_ids
                     ]
                 col_total.append(sum(col_values))
-                if progress_callback:
-                    progress_callback()
+
+                # AS 11.2023
+                if caller:
+                    # Update progress bar by 1 iteration
+                    # This is a modified version of the signal
+                    # that works only with ConvertThread!
+                    caller.signal_prog.emit(-1, False)
+                
+                    # End thread if requested by user
+                    if caller.cancel_operation:
+                        caller.signal_prog.emit(100, False)
+                        return
+
             total = sum(col_total)
             for row_id in row_ids:
                 row_values = [
@@ -904,8 +1138,19 @@ class IntPivotCrosstab(PivotCrosstab):
                             /
                             freq_under_indep
                         )
-                    if progress_callback:
-                        progress_callback()
+
+                    # AS 11.2023
+                    if caller:
+                        # Update progress bar by 1 iteration
+                        # This is a modified version of the signal
+                        # that works only with ConvertThread!
+                        caller.signal_prog.emit(-1, False)
+                    
+                        # End thread if requested by user
+                        if caller.cancel_operation:
+                            caller.signal_prog.emit(100, False)
+                            return
+
         elif mode == 'TF-IDF':
             table_class = PivotCrosstab
             row_ids = self.row_ids
@@ -927,8 +1172,19 @@ class IntPivotCrosstab(PivotCrosstab):
                         [(row_id, col_id) for row_id in row_ids],
                         [0 for v in col_values]
                     ))
-                if progress_callback:
-                    progress_callback()
+
+                # AS 11.2023
+                if caller:
+                    # Update progress bar by 1 iteration
+                    # This is a modified version of the signal
+                    # that works only with ConvertThread!
+                    caller.signal_prog.emit(-1, False)
+                
+                    # End thread if requested by user
+                    if caller.cancel_operation:
+                        caller.signal_prog.emit(100, False)
+                        return
+
         return (
             table_class(
                 list(self.row_ids),
@@ -945,7 +1201,7 @@ class IntPivotCrosstab(PivotCrosstab):
             )
         )
 
-    def to_document_frequency(self, progress_callback=None):
+    def to_document_frequency(self, caller=None):
         """Return a table with document frequencies based on the crosstab"""
         context_type = '__document_frequency__'
         document_freq = dict()
@@ -955,8 +1211,19 @@ class IntPivotCrosstab(PivotCrosstab):
                 col_id
             )
             document_freq[(context_type, col_id)] = len(unit_profile)
-            if progress_callback:
-                progress_callback()
+            
+            # AS 11.2023
+            if caller:
+                # Update progress bar by 1 iteration
+                # This is a modified version of the signal
+                # that works only with ConvertThread!
+                caller.signal_prog.emit(-1, False)
+            
+                # End thread if requested by user
+                if caller.cancel_operation:
+                    caller.signal_prog.emit(100, False)
+                    return
+
         return (
             IntPivotCrosstab(
                 [context_type],
@@ -973,7 +1240,7 @@ class IntPivotCrosstab(PivotCrosstab):
             )
         )
 
-    def to_association_matrix(self, bias='none', progress_callback=None):
+    def to_association_matrix(self, bias='none', caller=None):
         """Return a table with Markov associativities between columns
         (cf. Bavaud & Xanthos 2005, Deneulin et al. 2014)
         """
@@ -1009,8 +1276,19 @@ class IntPivotCrosstab(PivotCrosstab):
                     for i in xrange(len(col_ids))
                 )
             )
-            if progress_callback:
-                progress_callback()
+            
+            # AS 11.2023
+            if caller:
+                # Update progress bar by 1 iteration
+                # This is a modified version of the signal
+                # that works only with ConvertThread!
+                caller.signal_prog.emit(-1, False)
+            
+                # End thread if requested by user
+                if caller.cancel_operation:
+                    caller.signal_prog.emit(100, False)
+                    return
+
         new_header_row_id = (
             self.header_row_id[:-2]
             + "2"
@@ -1029,7 +1307,7 @@ class IntPivotCrosstab(PivotCrosstab):
             )
         )
 
-    def to_flat(self, progress_callback=None):
+    def to_flat(self, caller=None):
         """Return a copy of the crosstab in 'flat' format"""
         new_header_col_id = '__id__'
         new_header_col_type = 'string'
@@ -1057,8 +1335,19 @@ class IntPivotCrosstab(PivotCrosstab):
                     if num_row_ids > 1:
                         new_values[(new_row_id, second_col_id)] = row_id
                     row_counter += 1
-            if progress_callback:
-                progress_callback()
+
+            # AS 11.2023
+            if caller:
+                # Update progress bar by 1 iteration
+                # This is a modified version of the signal
+                # that works only with ConvertThread!
+                caller.signal_prog.emit(-1, False)
+            
+                # End thread if requested by user
+                if caller.cancel_operation:
+                    caller.signal_prog.emit(100, False)
+                    return
+
         return (
             FlatCrosstab(
                 new_row_ids,
@@ -1073,12 +1362,12 @@ class IntPivotCrosstab(PivotCrosstab):
             )
         )
 
-    def to_weighted_flat(self, progress_callback=None):
+    def to_weighted_flat(self, caller=None):
         """Return a copy of the crosstab in 'weighted and flat' format with
         integer values
         """
         weighted_flat = super(IntPivotCrosstab, self).to_weighted_flat(
-            progress_callback=progress_callback
+            caller=caller
         )
         weighted_flat.__class__ = IntWeightedFlatCrosstab
         return weighted_flat
@@ -1175,7 +1464,7 @@ class FlatCrosstab(Crosstab):
             )
         )
 
-    def to_weighted_flat(self, progress_callback=None):
+    def to_weighted_flat(self, caller=None):
         """Return a copy of the crosstab in 'weighted and flat' format"""
         new_col_ids = list(self.col_ids)
         new_col_type = dict(self.col_type)
@@ -1201,8 +1490,19 @@ class FlatCrosstab(Crosstab):
                     new_values[(new_row_id, second_col_id)] = second_col_value
                     new_values[(new_row_id, '__weight__')] = 1
                     row_counter += 1
-                if progress_callback:
-                    progress_callback()
+                
+                # AS 11.2023
+                if caller:
+                    # Update progress bar by 1 iteration
+                    # This is a modified version of the signal
+                    # that works only with ConvertThread!
+                    caller.signal_prog.emit(-1, False)
+                
+                    # End thread if requested by user
+                    if caller.cancel_operation:
+                        caller.signal_prog.emit(100, False)
+                        return
+                
         else:
             col_id = self.col_ids[0]
             row_id_for_value = dict()
@@ -1218,8 +1518,19 @@ class FlatCrosstab(Crosstab):
                     new_values[(new_row_id, col_id)] = col_value
                     new_values[(new_row_id, '__weight__')] = 1
                     row_counter += 1
-                if progress_callback:
-                    progress_callback()
+                
+                # AS 11.2023
+                if caller:
+                    # Update progress bar by 1 iteration
+                    # This is a modified version of the signal
+                    # that works only with ConvertThread!
+                    caller.signal_prog.emit(-1, False)
+                
+                    # End thread if requested by user
+                    if caller.cancel_operation:
+                        caller.signal_prog.emit(100, False)
+                        return
+                
         new_col_ids.append('__weight__')
         new_col_type['__weight__'] = 'continuous'
         return (

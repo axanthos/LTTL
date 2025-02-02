@@ -1,20 +1,20 @@
 """Module Segment.py
-Copyright 2012-2016 LangTech Sarl (info@langtech.ch)
+Copyright 2012-2025 LangTech Sarl (info@langtech.ch)
 ---------------------------------------------------------------------------
-This file is part of the LTTL package v2.0.
+This file is part of the LTTL package.
 
-LTTL v2.0 is free software: you can redistribute it and/or modify
+LTTL is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
 the Free Software Foundation, either version 3 of the License, or
 (at your option) any later version.
 
-LTTL v2.0 is distributed in the hope that it will be useful,
+LTTL is distributed in the hope that it will be useful,
 but WITHOUT ANY WARRANTY; without even the implied warranty of
 MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 GNU General Public License for more details.
 
 You should have received a copy of the GNU General Public License
-along with LTTL v2.0. If not, see <http://www.gnu.org/licenses/>.
+along with LTTL. If not, see <http://www.gnu.org/licenses/>.
 """
 
 from __future__ import absolute_import
@@ -30,7 +30,7 @@ from .Segmentation import Segmentation
 
 from builtins import range
 
-__version__ = "1.0.4"
+__version__ = "1.0.5"
 
 
 class Segment(object):
@@ -98,7 +98,7 @@ class Segment(object):
         default_dict=None,
         progress_callback=None,
     ):
-        """Stringify a segmentation
+        """Stringify a segment
 
         :param formatting: format string for each segment (default None)
 
